@@ -5,32 +5,17 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { redirect } from 'next/navigation';
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { UrlShortenerForm } from '@/components/urls/url-shortener-form';
 import { UserUrlsTable } from '@/components/urls/user-urls-table';
 import { AnalyticsTab } from '@/components/dashboard/analytics-tab';
 import { BulkShortenTab } from '@/components/dashboard/bulk-shorten-tab';
 import { LinkInBioTab } from '@/components/dashboard/link-in-bio-tab';
-import { DashboardTabs } from '@/components/dashboard/dashboard-tabs';
+import { ApiKeysTab } from '@/components/dashboard/api-keys-tab';
+import { DashboardTabs, type TabId } from '@/components/dashboard/dashboard-tabs';
 import { getUserUrls, type UserUrl } from '@/server/actions/urls/get-user-urls';
 
-import {
-  BarChart3,
-  Link2,
-  MousePointerClick,
-  TrendingUp,
-  Sparkles,
-  ArrowUpRight,
-  Loader2,
-} from 'lucide-react';
-
-export type TabId = 'links' | 'analytics' | 'bulk' | 'bio';
+import { BarChart3, Link2, MousePointerClick, TrendingUp, Sparkles, ArrowUpRight, Loader2 } from 'lucide-react';
 
 export default function DashboardPage() {
   const { data: session, status } = useSession();
@@ -45,9 +30,7 @@ export default function DashboardPage() {
   const fetchUrls = useCallback(async () => {
     if (!session?.user?.id) return;
     const response = await getUserUrls(session.user.id);
-    if (response.success && response.data) {
-      setUserUrls(response.data);
-    }
+    if (response.success && response.data) setUserUrls(response.data);
     setLoading(false);
   }, [session?.user?.id]);
 
@@ -64,42 +47,14 @@ export default function DashboardPage() {
 
   const totalClicks = userUrls.reduce((sum, u) => sum + u.clicks, 0);
   const topUrl = [...userUrls].sort((a, b) => b.clicks - a.clicks)[0];
-  const avgClicks =
-    userUrls.length > 0
-      ? Math.round((totalClicks / userUrls.length) * 10) / 10
-      : 0;
-
+  const avgClicks = userUrls.length > 0 ? Math.round((totalClicks / userUrls.length) * 10) / 10 : 0;
   const firstName = session?.user?.name?.split(' ')[0] ?? '';
 
   const stats = [
-    {
-      label: 'Total Links',
-      value: userUrls.length,
-      icon: <Link2 className='size-4' />,
-      accent: 'text-violet-600 dark:text-violet-400 bg-violet-100 dark:bg-violet-900/30',
-      change: null,
-    },
-    {
-      label: 'Total Clicks',
-      value: totalClicks.toLocaleString(),
-      icon: <MousePointerClick className='size-4' />,
-      accent: 'text-fuchsia-600 dark:text-fuchsia-400 bg-fuchsia-100 dark:bg-fuchsia-900/30',
-      change: null,
-    },
-    {
-      label: 'Avg. Clicks',
-      value: avgClicks,
-      icon: <BarChart3 className='size-4' />,
-      accent: 'text-violet-600 dark:text-violet-400 bg-violet-100 dark:bg-violet-900/30',
-      change: null,
-    },
-    {
-      label: 'Top Link',
-      value: topUrl?.clicks ?? 0,
-      icon: <TrendingUp className='size-4' />,
-      accent: 'text-fuchsia-600 dark:text-fuchsia-400 bg-fuchsia-100 dark:bg-fuchsia-900/30',
-      change: topUrl ? topUrl.shortCode : '—',
-    },
+    { label: 'Total Links', value: userUrls.length, icon: <Link2 className='size-4' />, accent: 'text-violet-600 dark:text-violet-400 bg-violet-100 dark:bg-violet-900/30', sub: null },
+    { label: 'Total Clicks', value: totalClicks.toLocaleString(), icon: <MousePointerClick className='size-4' />, accent: 'text-fuchsia-600 dark:text-fuchsia-400 bg-fuchsia-100 dark:bg-fuchsia-900/30', sub: null },
+    { label: 'Avg. Clicks', value: avgClicks, icon: <BarChart3 className='size-4' />, accent: 'text-violet-600 dark:text-violet-400 bg-violet-100 dark:bg-violet-900/30', sub: null },
+    { label: 'Top Link', value: topUrl?.clicks ?? 0, icon: <TrendingUp className='size-4' />, accent: 'text-fuchsia-600 dark:text-fuchsia-400 bg-fuchsia-100 dark:bg-fuchsia-900/30', sub: topUrl?.shortCode ?? null },
   ];
 
   if (status === 'loading' || loading) {
@@ -136,50 +91,39 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      {/* ── Stats grid ── */}
+      {/* ── Stats ── */}
       {userUrls.length > 0 && (
         <div className='grid grid-cols-2 lg:grid-cols-4 gap-3'>
           {stats.map((stat) => (
-            <div
-              key={stat.label}
-              className='p-4 rounded-2xl border border-border/60 bg-card hover:border-border hover:shadow-sm transition-all duration-200'
-            >
-              <div className={`inline-flex p-2 rounded-xl mb-3 ${stat.accent}`}>
-                {stat.icon}
-              </div>
-              <p className='text-2xl font-bold bg-gradient-to-r from-violet-600 to-fuchsia-600 dark:from-violet-400 dark:to-fuchsia-400 bg-clip-text text-transparent'>
-                {stat.value}
-              </p>
+            <div key={stat.label} className='p-4 rounded-2xl border border-border/60 bg-card hover:border-border hover:shadow-sm transition-all duration-200'>
+              <div className={`inline-flex p-2 rounded-xl mb-3 ${stat.accent}`}>{stat.icon}</div>
+              <p className='text-2xl font-bold bg-gradient-to-r from-violet-600 to-fuchsia-600 dark:from-violet-400 dark:to-fuchsia-400 bg-clip-text text-transparent'>{stat.value}</p>
               <p className='text-xs text-muted-foreground mt-1'>{stat.label}</p>
-              {stat.change && (
-                <p className='text-xs text-violet-600 dark:text-violet-400 mt-0.5 font-mono truncate'>
-                  /{stat.change}
-                </p>
-              )}
+              {stat.sub && <p className='text-xs text-violet-600 dark:text-violet-400 mt-0.5 font-mono truncate'>/{stat.sub}</p>}
             </div>
           ))}
         </div>
       )}
 
-      {/* ── URL Shortener form ── */}
-      <Card className='border-border/60 shadow-sm rounded-2xl overflow-hidden'>
-        <CardHeader className='pb-4 border-b border-border/60 bg-muted/20'>
-          <div className='flex items-center gap-2'>
-            <div className='size-8 rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center text-white'>
-              <Sparkles className='size-4' />
+      {/* ── Shortener form — hide on settings tab ── */}
+      {activeTab !== 'settings' && (
+        <Card className='border-border/60 shadow-sm rounded-2xl overflow-hidden'>
+          <CardHeader className='pb-4 border-b border-border/60 bg-muted/20'>
+            <div className='flex items-center gap-2'>
+              <div className='size-8 rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center text-white'>
+                <Sparkles className='size-4' />
+              </div>
+              <div>
+                <CardTitle className='text-base'>Shorten a URL</CardTitle>
+                <CardDescription className='text-xs'>Paste a long URL — AI safety scans it instantly</CardDescription>
+              </div>
             </div>
-            <div>
-              <CardTitle className='text-base'>Shorten a URL</CardTitle>
-              <CardDescription className='text-xs'>
-                Paste a long URL — AI safety scans it instantly
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className='pt-6'>
-          <UrlShortenerForm onSuccess={fetchUrls} />
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent className='pt-6'>
+            <UrlShortenerForm onSuccess={fetchUrls} />
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Tabs ── */}
       <div>
@@ -203,8 +147,7 @@ export default function DashboardPage() {
                     onClick={() => setTab('analytics')}
                     className='text-xs text-muted-foreground hover:text-violet-600 dark:hover:text-violet-400 flex items-center gap-1 transition-colors'
                   >
-                    <BarChart3 className='size-3' />
-                    Analytics
+                    <BarChart3 className='size-3' /> Analytics
                   </button>
                 </div>
               </CardHeader>
@@ -213,10 +156,10 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           )}
-
           {activeTab === 'analytics' && <AnalyticsTab urls={userUrls} />}
           {activeTab === 'bulk' && <BulkShortenTab onSuccess={fetchUrls} />}
           {activeTab === 'bio' && <LinkInBioTab />}
+          {activeTab === 'settings' && <ApiKeysTab />}
         </div>
       </div>
     </div>

@@ -101,7 +101,6 @@ export const bioPages = pgTable('bio_pages', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
-// ── Phase 3: Audit log ─────────────────────────────────────────────────────
 export const auditLogs = pgTable('audit_logs', {
   id: serial('id').primaryKey(),
   actorId: varchar('actor_id', { length: 255 }).references(() => users.id, { onDelete: 'set null' }),
@@ -112,6 +111,18 @@ export const auditLogs = pgTable('audit_logs', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
+// ── Phase 4: API keys ──────────────────────────────────────────────────────
+export const apiKeys = pgTable('api_keys', {
+  id: serial('id').primaryKey(),
+  userId: varchar('user_id', { length: 255 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 100 }).notNull(),
+  keyHash: varchar('key_hash', { length: 255 }).notNull().unique(),
+  keyPrefix: varchar('key_prefix', { length: 12 }).notNull(), // e.g. "sk_live_AbCd" shown in UI
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  lastUsedAt: timestamp('last_used_at'),
+  revokedAt: timestamp('revoked_at'),
+});
+
 // ── Relations ──────────────────────────────────────────────────────────────
 export const usersRelations = relations(users, ({ many, one }) => ({
   urls: many(urls),
@@ -119,6 +130,7 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   sessions: many(sessions),
   bioPage: one(bioPages, { fields: [users.id], references: [bioPages.userId] }),
   auditLogs: many(auditLogs),
+  apiKeys: many(apiKeys),
 }));
 
 export const urlsRelations = relations(urls, ({ one, many }) => ({
@@ -136,4 +148,8 @@ export const bioPagesRelations = relations(bioPages, ({ one }) => ({
 
 export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
   actor: one(users, { fields: [auditLogs.actorId], references: [users.id] }),
+}));
+
+export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
+  user: one(users, { fields: [apiKeys.userId], references: [users.id] }),
 }));

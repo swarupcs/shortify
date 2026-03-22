@@ -15,6 +15,13 @@
       "when": 1774193275918,
       "tag": "0001_yielding_pandemic",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1774200728589,
+      "tag": "0002_safe_mandroid",
+      "breakpoints": true
     }
   ]
 }
