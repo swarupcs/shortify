@@ -1,4 +1,5 @@
 'use client';
+
 import { useForm } from 'react-hook-form';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '../ui/form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -16,6 +17,8 @@ import {
   ChevronUp,
   Copy,
   ExternalLink,
+  Eye,
+  EyeOff,
   Link2,
   QrCode,
   Sparkles,
@@ -46,16 +49,18 @@ const urlFormSchema = z.object({
   customCode: z
     .string()
     .max(20, 'Must be less than 20 characters')
-    .regex(
-      /^[a-zA-Z0-9_-]+$/,
-      'Only letters, numbers, hyphens, underscores',
-    )
+    .regex(/^[a-zA-Z0-9_-]+$/, 'Only letters, numbers, hyphens, underscores')
+    .optional(),
+  expiresAt: z.string().optional(),
+  password: z
+    .string()
+    .max(100, 'Password too long')
     .optional(),
 });
+
 type UrlFormData = z.infer<typeof urlFormSchema>;
 
 interface UrlShortenerFormProps {
-  /** Called after a URL is successfully shortened — use to refresh the URL list */
   onSuccess?: () => void;
 }
 
@@ -71,6 +76,7 @@ export function UrlShortenerForm({ onSuccess }: UrlShortenerFormProps) {
   const [isQrCodeModalOpen, setIsQrCodeModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [flaggedInfo, setFlaggedInfo] = useState<{
     flagged: boolean;
     reason: string | null;
@@ -79,7 +85,7 @@ export function UrlShortenerForm({ onSuccess }: UrlShortenerFormProps) {
 
   const form = useForm<UrlFormData>({
     resolver: zodResolver(urlFormSchema),
-    defaultValues: { url: '', customCode: undefined },
+    defaultValues: { url: '', customCode: undefined, expiresAt: '', password: '' },
   });
 
   const onSubmit = async (data: UrlFormData) => {
@@ -93,6 +99,8 @@ export function UrlShortenerForm({ onSuccess }: UrlShortenerFormProps) {
       const formData = new FormData();
       formData.append('url', data.url);
       if (data.customCode) formData.append('customCode', data.customCode);
+      if (data.expiresAt) formData.append('expiresAt', data.expiresAt);
+      if (data.password) formData.append('password', data.password);
 
       const response = await shortenUrl(formData);
 
@@ -141,11 +149,17 @@ export function UrlShortenerForm({ onSuccess }: UrlShortenerFormProps) {
     }
   };
 
+  // Min date = tomorrow
+  const minDate = new Date();
+  minDate.setDate(minDate.getDate() + 1);
+  const minDateStr = minDate.toISOString().split('T')[0];
+
   return (
     <>
       <div className='w-full max-w-2xl mx-auto'>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-3'>
+            {/* ── Main URL input ── */}
             <div className='flex gap-2 p-1.5 rounded-2xl border border-border bg-background shadow-sm focus-within:ring-2 focus-within:ring-violet-500/20 focus-within:border-violet-400 transition-all'>
               <div className='flex items-center pl-2 text-muted-foreground'>
                 <Link2 className='size-4 shrink-0' />
@@ -186,26 +200,28 @@ export function UrlShortenerForm({ onSuccess }: UrlShortenerFormProps) {
               </Button>
             </div>
 
+            {/* ── Advanced toggle ── */}
             <button
               type='button'
               onClick={() => setShowAdvanced(!showAdvanced)}
               className='flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mx-auto'
             >
-              {showAdvanced ? (
-                <ChevronUp className='size-3' />
-              ) : (
-                <ChevronDown className='size-3' />
-              )}
+              {showAdvanced ? <ChevronUp className='size-3' /> : <ChevronDown className='size-3' />}
               {showAdvanced ? 'Hide' : 'Show'} advanced options
             </button>
 
+            {/* ── Advanced options ── */}
             {showAdvanced && (
-              <div className='p-4 rounded-xl border border-border/60 bg-muted/30 space-y-3'>
+              <div className='p-4 rounded-xl border border-border/60 bg-muted/30 space-y-4'>
+                {/* Custom code */}
                 <FormField
                   control={form.control}
                   name='customCode'
                   render={({ field }) => (
                     <FormItem>
+                      <p className='text-xs font-medium text-muted-foreground mb-1.5'>
+                        Custom short code
+                      </p>
                       <div className='flex items-center gap-2'>
                         <span className='text-xs text-muted-foreground whitespace-nowrap shrink-0'>
                           {BASEURL}/r/
@@ -214,9 +230,7 @@ export function UrlShortenerForm({ onSuccess }: UrlShortenerFormProps) {
                           <Input
                             {...field}
                             value={field.value || ''}
-                            onChange={(e) =>
-                              field.onChange(e.target.value || undefined)
-                            }
+                            onChange={(e) => field.onChange(e.target.value || undefined)}
                             placeholder='custom-code (optional)'
                             disabled={isLoading}
                             className='h-8 text-sm'
@@ -227,9 +241,72 @@ export function UrlShortenerForm({ onSuccess }: UrlShortenerFormProps) {
                     </FormItem>
                   )}
                 />
+
+                <div className='grid sm:grid-cols-2 gap-4'>
+                  {/* Expiry date */}
+                  <FormField
+                    control={form.control}
+                    name='expiresAt'
+                    render={({ field }) => (
+                      <FormItem>
+                        <p className='text-xs font-medium text-muted-foreground mb-1.5'>
+                          Expiry date (optional)
+                        </p>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            type='date'
+                            min={minDateStr}
+                            disabled={isLoading}
+                            className='h-8 text-sm'
+                          />
+                        </FormControl>
+                        <FormMessage className='text-xs' />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Password */}
+                  <FormField
+                    control={form.control}
+                    name='password'
+                    render={({ field }) => (
+                      <FormItem>
+                        <p className='text-xs font-medium text-muted-foreground mb-1.5'>
+                          Password protection (optional)
+                        </p>
+                        <FormControl>
+                          <div className='relative'>
+                            <Input
+                              {...field}
+                              type={showPassword ? 'text' : 'password'}
+                              placeholder='Set a password…'
+                              disabled={isLoading}
+                              className='h-8 text-sm pr-8'
+                            />
+                            <button
+                              type='button'
+                              onClick={() => setShowPassword(!showPassword)}
+                              className='absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors'
+                              tabIndex={-1}
+                            >
+                              {showPassword ? (
+                                <EyeOff className='size-3.5' />
+                              ) : (
+                                <Eye className='size-3.5' />
+                              )}
+                            </button>
+                          </div>
+                        </FormControl>
+                        <FormMessage className='text-xs' />
+                      </FormItem>
+                    )}
+                  />
+                </div>
               </div>
             )}
 
+            {/* ── Error ── */}
             {error && (
               <div className='flex items-center gap-2 p-3 bg-destructive/10 text-destructive rounded-xl text-sm'>
                 <AlertTriangle className='size-4 shrink-0' />
@@ -237,6 +314,7 @@ export function UrlShortenerForm({ onSuccess }: UrlShortenerFormProps) {
               </div>
             )}
 
+            {/* ── Result card ── */}
             {shortUrl && (
               <Card className='border-violet-200 dark:border-violet-800 bg-violet-50/50 dark:bg-violet-950/20 overflow-hidden'>
                 <CardContent className='p-4'>
@@ -268,11 +346,7 @@ export function UrlShortenerForm({ onSuccess }: UrlShortenerFormProps) {
                       )}
                       onClick={copyToClipboard}
                     >
-                      {copied ? (
-                        <Check className='size-4' />
-                      ) : (
-                        <Copy className='size-4' />
-                      )}
+                      {copied ? <Check className='size-4' /> : <Copy className='size-4' />}
                     </Button>
                     <Button
                       type='button'
@@ -293,8 +367,7 @@ export function UrlShortenerForm({ onSuccess }: UrlShortenerFormProps) {
                           Link flagged for review
                         </p>
                         <p className='text-xs text-amber-600 dark:text-amber-400 mt-0.5'>
-                          {flaggedInfo.message ||
-                            'This URL is pending admin review.'}
+                          {flaggedInfo.message || 'This URL is pending admin review.'}
                         </p>
                         {flaggedInfo.reason && (
                           <p className='text-xs text-amber-600 dark:text-amber-400 mt-1'>

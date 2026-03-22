@@ -5,22 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1762362182511,
-      "tag": "0000_classy_lorna_dane",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1762596552217,
-      "tag": "0001_giant_pixie",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1762606207739,
-      "tag": "0002_salty_goblin_queen",
+      "when": 1774188920344,
+      "tag": "0000_cheerful_shen",
       "breakpoints": true
     }
   ]
