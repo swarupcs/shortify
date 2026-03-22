@@ -21,7 +21,7 @@ declare module 'next-auth' {
   }
 }
 
-declare module 'next-auth/jwt' {
+declare module 'next-auth' {
   interface JWT {
     id?: string;
     role?: 'user' | 'admin';
@@ -206,7 +206,7 @@ export const authConfig: NextAuthConfig = {
 
     async session({ session, token }) {
       session.user.id    = token.id    as string;
-      session.user.role  = token.role;
+      session.user.role = token.role as 'user' | 'admin' | undefined;
       session.user.email = token.email as string;
       session.user.name  = token.name  as string;
       session.user.image = token.picture as string | null | undefined;
