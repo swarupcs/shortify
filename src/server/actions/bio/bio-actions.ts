@@ -62,7 +62,7 @@ export async function saveBioPage(input: {
 
     const validated = saveBioSchema.safeParse(input);
     if (!validated.success) {
-      const firstError = validated.error.errors[0]?.message || 'Invalid input';
+      const firstError = validated.error.issues[0]?.message || 'Invalid input';
       return { success: false, error: firstError };
     }
 
