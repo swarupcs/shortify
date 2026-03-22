@@ -2,22 +2,11 @@ import { AdminSidebar } from "@/components/admin/admin-sidebar";
 import { auth } from "@/server/auth";
 import { redirect } from "next/navigation";
 import { ReactNode } from "react";
-
-interface AdminLayoutProps {
-  children: ReactNode;
-}
-
+interface AdminLayoutProps { children: ReactNode; }
 export default async function AdminLayout({ children }: AdminLayoutProps) {
   const session = await auth();
-
-  if (!session?.user) {
-    redirect("/login");
-  }
-
-  if (session.user.role !== "admin") {
-    redirect("/dashboard");
-  }
-
+  if (!session?.user) redirect("/login");
+  if (session.user.role !== "admin") redirect("/dashboard");
   return (
     <div className="flex flex-col min-h-screen pt-14">
       <div className="flex flex-1 w-full">

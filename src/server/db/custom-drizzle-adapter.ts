@@ -6,12 +6,12 @@ import { eq, and } from 'drizzle-orm';
 import type { InferSelectModel, InferInsertModel } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 
-export type User = InferSelectModel<typeof users>;
-export type NewUser = InferInsertModel<typeof users>;
-export type Account = InferSelectModel<typeof accounts>;
-export type NewAccount = InferInsertModel<typeof accounts>;
-export type Session = InferSelectModel<typeof sessions>;
-export type NewSession = InferInsertModel<typeof sessions>;
+export type User              = InferSelectModel<typeof users>;
+export type NewUser           = InferInsertModel<typeof users>;
+export type Account           = InferSelectModel<typeof accounts>;
+export type NewAccount        = InferInsertModel<typeof accounts>;
+export type Session           = InferSelectModel<typeof sessions>;
+export type NewSession        = InferInsertModel<typeof sessions>;
 export type VerificationToken = InferSelectModel<typeof verificationTokens>;
 
 export function CustomDrizzleAdapter(): Adapter {
@@ -103,14 +103,17 @@ export function CustomDrizzleAdapter(): Adapter {
     async createUser(data: NewUser): Promise<AdapterUser> {
       const newUser: NewUser = {
         ...data,
-        id: nanoid(), // always our own ID
-        email: data.email.toLowerCase(),
-        role: data.role ?? 'user',
+        id:        nanoid(),          // always our own ID
+        email:     data.email.toLowerCase(),
+        role:      data.role ?? 'user',
         createdAt: data.createdAt ?? new Date(),
         updatedAt: data.updatedAt ?? new Date(),
       };
 
-      const [created] = await db.insert(users).values(newUser).returning();
+      const [created] = await db
+        .insert(users)
+        .values(newUser)
+        .returning();
 
       return created;
     },
@@ -138,7 +141,10 @@ export function CustomDrizzleAdapter(): Adapter {
     // Session methods (unchanged from base, but explicit for clarity)
     // ------------------------------------------------------------------
     async createSession(session: NewSession): Promise<AdapterSession> {
-      const [created] = await db.insert(sessions).values(session).returning();
+      const [created] = await db
+        .insert(sessions)
+        .values(session)
+        .returning();
       return created;
     },
 
@@ -158,7 +164,9 @@ export function CustomDrizzleAdapter(): Adapter {
     },
 
     async deleteSession(sessionToken: string): Promise<void> {
-      await db.delete(sessions).where(eq(sessions.sessionToken, sessionToken));
+      await db
+        .delete(sessions)
+        .where(eq(sessions.sessionToken, sessionToken));
     },
 
     async useVerificationToken(params: {

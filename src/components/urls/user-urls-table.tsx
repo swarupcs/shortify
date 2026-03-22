@@ -8,9 +8,15 @@ import {
   Trash2Icon,
   Check,
   LinkIcon,
+  Search,
+  X,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Button } from '../ui/button';
+import { Input } from '../ui/input';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { deleteUrl } from '@/server/actions/urls/delete-url';
@@ -29,9 +35,13 @@ interface Url {
 
 interface UserUrlsTableProps {
   urls: Url[];
+  onRefresh?: () => void;
 }
 
-export function UserUrlsTable({ urls }: UserUrlsTableProps) {
+type SortField = 'shortCode' | 'clicks' | 'createdAt' | 'originalUrl';
+type SortOrder = 'asc' | 'desc';
+
+export function UserUrlsTable({ urls, onRefresh }: UserUrlsTableProps) {
   const [isDeleting, setIsDeleting] = useState<number | null>(null);
   const [localUrls, setLocalUrls] = useState<Url[]>(urls);
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
@@ -44,12 +54,89 @@ export function UserUrlsTable({ urls }: UserUrlsTableProps) {
   } | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
 
+  // Search & sort state
+  const [search, setSearch] = useState('');
+  const [sortField, setSortField] = useState<SortField>('createdAt');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+
   const baseUrl = BASEURL;
 
+  // Keep localUrls in sync when parent re-fetches
+  useMemo(() => {
+    setLocalUrls(urls);
+  }, [urls]);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field)
+      return <ArrowUpDown className='size-3.5 opacity-40' />;
+    return sortOrder === 'asc' ? (
+      <ArrowUp className='size-3.5' />
+    ) : (
+      <ArrowDown className='size-3.5' />
+    );
+  };
+
+  const filteredAndSorted = useMemo(() => {
+    let filtered = localUrls;
+
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      filtered = filtered.filter(
+        (u) =>
+          u.shortCode.toLowerCase().includes(q) ||
+          u.originalUrl.toLowerCase().includes(q),
+      );
+    }
+
+    return [...filtered].sort((a, b) => {
+      let vA: string | number | Date;
+      let vB: string | number | Date;
+
+      switch (sortField) {
+        case 'shortCode':
+          vA = a.shortCode;
+          vB = b.shortCode;
+          break;
+        case 'clicks':
+          vA = a.clicks;
+          vB = b.clicks;
+          break;
+        case 'createdAt':
+          vA = a.createdAt;
+          vB = b.createdAt;
+          break;
+        case 'originalUrl':
+          vA = a.originalUrl;
+          vB = b.originalUrl;
+          break;
+        default:
+          return 0;
+      }
+
+      if (typeof vA === 'string' && typeof vB === 'string') {
+        return sortOrder === 'asc'
+          ? vA.localeCompare(vB)
+          : vB.localeCompare(vA);
+      }
+
+      if (vA < vB) return sortOrder === 'asc' ? -1 : 1;
+      if (vA > vB) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [localUrls, search, sortField, sortOrder]);
+
   const copyToClipboard = async (id: number, shortCode: string) => {
-    const shortUrl = `${baseUrl}/r/${shortCode}`;
     try {
-      await navigator.clipboard.writeText(shortUrl);
+      await navigator.clipboard.writeText(`${baseUrl}/r/${shortCode}`);
       setCopiedId(id);
       toast.success('Copied to clipboard!');
       setTimeout(() => setCopiedId(null), 2000);
@@ -63,8 +150,10 @@ export function UserUrlsTable({ urls }: UserUrlsTableProps) {
     try {
       const response = await deleteUrl(id);
       if (response.success) {
+        // Optimistic removal — no router.refresh() needed
         setLocalUrls((prev) => prev.filter((url) => url.id !== id));
         toast.success('Link deleted');
+        onRefresh?.();
       } else {
         toast.error('Failed to delete', { description: response.error });
       }
@@ -76,8 +165,7 @@ export function UserUrlsTable({ urls }: UserUrlsTableProps) {
   };
 
   const showQrCode = (shortCode: string) => {
-    const shortUrl = `${baseUrl}/r/${shortCode}`;
-    setQrCodeUrl(shortUrl);
+    setQrCodeUrl(`${baseUrl}/r/${shortCode}`);
     setQrCodeShortCode(shortCode);
     setIsQrCodeModalOpen(true);
   };
@@ -104,8 +192,7 @@ export function UserUrlsTable({ urls }: UserUrlsTableProps) {
         </div>
         <h3 className='font-semibold mb-2'>No links yet</h3>
         <p className='text-sm text-muted-foreground max-w-xs'>
-          Create your first shortened link using the form above. Start sharing
-          smarter links today.
+          Create your first shortened link using the form above.
         </p>
       </div>
     );
@@ -113,22 +200,74 @@ export function UserUrlsTable({ urls }: UserUrlsTableProps) {
 
   return (
     <>
+      {/* Search bar */}
+      <div className='px-4 py-3 border-b border-border/60'>
+        <div className='relative max-w-sm'>
+          <Search className='absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground' />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder='Search links…'
+            className='pl-8 pr-8 h-8 text-sm border-border/60 focus-visible:ring-violet-500/20 focus-visible:border-violet-400'
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              className='absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors'
+            >
+              <X className='size-3.5' />
+            </button>
+          )}
+        </div>
+        {search && (
+          <p className='text-xs text-muted-foreground mt-1.5'>
+            {filteredAndSorted.length} result
+            {filteredAndSorted.length !== 1 ? 's' : ''} for &ldquo;{search}
+            &rdquo;
+          </p>
+        )}
+      </div>
+
       {/* Desktop table */}
-      <div className='hidden md:block'>
+      <div className='hidden md:block overflow-x-auto'>
         <table className='w-full'>
           <thead>
             <tr className='border-b border-border/60'>
-              <th className='text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide'>
-                Original URL
+              <th className='text-left px-4 py-3'>
+                <button
+                  onClick={() => handleSort('originalUrl')}
+                  className='flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors'
+                >
+                  Original URL
+                  <SortIcon field='originalUrl' />
+                </button>
               </th>
-              <th className='text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide'>
-                Short Link
+              <th className='text-left px-4 py-3'>
+                <button
+                  onClick={() => handleSort('shortCode')}
+                  className='flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors'
+                >
+                  Short Link
+                  <SortIcon field='shortCode' />
+                </button>
               </th>
-              <th className='text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide w-20'>
-                Clicks
+              <th className='text-left px-4 py-3'>
+                <button
+                  onClick={() => handleSort('clicks')}
+                  className='flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors'
+                >
+                  Clicks
+                  <SortIcon field='clicks' />
+                </button>
               </th>
-              <th className='text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide w-32'>
-                Created
+              <th className='text-left px-4 py-3'>
+                <button
+                  onClick={() => handleSort('createdAt')}
+                  className='flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors'
+                >
+                  Created
+                  <SortIcon field='createdAt' />
+                </button>
               </th>
               <th className='text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide w-32'>
                 Actions
@@ -136,9 +275,17 @@ export function UserUrlsTable({ urls }: UserUrlsTableProps) {
             </tr>
           </thead>
           <tbody className='divide-y divide-border/40'>
-            {localUrls.map((url) => {
-              const shortUrl = `${baseUrl}/r/${url.shortCode}`;
-              return (
+            {filteredAndSorted.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={5}
+                  className='px-4 py-10 text-center text-sm text-muted-foreground'
+                >
+                  No links match &ldquo;{search}&rdquo;
+                </td>
+              </tr>
+            ) : (
+              filteredAndSorted.map((url) => (
                 <tr
                   key={url.id}
                   className='group hover:bg-muted/30 transition-colors'
@@ -162,11 +309,9 @@ export function UserUrlsTable({ urls }: UserUrlsTableProps) {
                     </div>
                   </td>
                   <td className='px-4 py-3'>
-                    <div className='flex items-center gap-1.5'>
-                      <span className='font-mono text-sm font-medium text-violet-600 dark:text-violet-400'>
-                        /r/{url.shortCode}
-                      </span>
-                    </div>
+                    <span className='font-mono text-sm font-medium text-violet-600 dark:text-violet-400'>
+                      /r/{url.shortCode}
+                    </span>
                   </td>
                   <td className='px-4 py-3'>
                     <span className='inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground'>
@@ -229,17 +374,20 @@ export function UserUrlsTable({ urls }: UserUrlsTableProps) {
                     </div>
                   </td>
                 </tr>
-              );
-            })}
+              ))
+            )}
           </tbody>
         </table>
       </div>
 
       {/* Mobile cards */}
       <div className='md:hidden divide-y divide-border/40'>
-        {localUrls.map((url) => {
-          const shortUrl = `${baseUrl}/r/${url.shortCode}`;
-          return (
+        {filteredAndSorted.length === 0 ? (
+          <div className='p-6 text-center text-sm text-muted-foreground'>
+            No links match &ldquo;{search}&rdquo;
+          </div>
+        ) : (
+          filteredAndSorted.map((url) => (
             <div key={url.id} className='p-4 space-y-3'>
               <div className='flex items-start justify-between gap-3'>
                 <div className='flex-1 min-w-0'>
@@ -262,11 +410,16 @@ export function UserUrlsTable({ urls }: UserUrlsTableProps) {
                   onClick={() => copyToClipboard(url.id, url.shortCode)}
                 >
                   {copiedId === url.id ? (
-                    <Check className='size-3 mr-1' />
+                    <>
+                      <Check className='size-3 mr-1' />
+                      Copied!
+                    </>
                   ) : (
-                    <Copy className='size-3 mr-1' />
+                    <>
+                      <Copy className='size-3 mr-1' />
+                      Copy
+                    </>
                   )}
-                  {copiedId === url.id ? 'Copied!' : 'Copy'}
                 </Button>
                 <Button
                   variant='outline'
@@ -295,8 +448,8 @@ export function UserUrlsTable({ urls }: UserUrlsTableProps) {
                 </Button>
               </div>
             </div>
-          );
-        })}
+          ))
+        )}
       </div>
 
       <QRCodeModal
@@ -305,7 +458,6 @@ export function UserUrlsTable({ urls }: UserUrlsTableProps) {
         url={qrCodeUrl}
         shortCode={qrCodeShortCode}
       />
-
       {urlToEdit && (
         <EditUrlModal
           isOpen={isEditModalOpen}

@@ -1,13 +1,6 @@
 'use client';
-
 import { useForm } from 'react-hook-form';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormMessage,
-} from '../ui/form';
+import { Form, FormControl, FormField, FormItem, FormMessage } from '../ui/form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Input } from '../ui/input';
@@ -53,17 +46,23 @@ const urlFormSchema = z.object({
   customCode: z
     .string()
     .max(20, 'Must be less than 20 characters')
-    .regex(/^[a-zA-Z0-9_-]+$/, 'Only letters, numbers, hyphens, underscores')
+    .regex(
+      /^[a-zA-Z0-9_-]+$/,
+      'Only letters, numbers, hyphens, underscores',
+    )
     .optional(),
 });
-
 type UrlFormData = z.infer<typeof urlFormSchema>;
 
-export function UrlShortenerForm() {
+interface UrlShortenerFormProps {
+  /** Called after a URL is successfully shortened — use to refresh the URL list */
+  onSuccess?: () => void;
+}
+
+export function UrlShortenerForm({ onSuccess }: UrlShortenerFormProps) {
   const { data: session } = useSession();
   const router = useRouter();
   const pathname = usePathname();
-
   const [shortUrl, setShortUrl] = useState<string | null>(null);
   const [shortCode, setShortCode] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -96,6 +95,7 @@ export function UrlShortenerForm() {
       if (data.customCode) formData.append('customCode', data.customCode);
 
       const response = await shortenUrl(formData);
+
       if (response.success && response.data) {
         setShortUrl(response.data.shortUrl);
         const match = response.data.shortUrl.match(/\/r\/([^/]+)$/);
@@ -113,6 +113,9 @@ export function UrlShortenerForm() {
         } else {
           toast.success('Link shortened successfully!');
         }
+
+        form.reset();
+        onSuccess?.();
       } else {
         setError(response.error || 'Something went wrong');
       }
@@ -143,7 +146,6 @@ export function UrlShortenerForm() {
       <div className='w-full max-w-2xl mx-auto'>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-3'>
-            {/* Main input row */}
             <div className='flex gap-2 p-1.5 rounded-2xl border border-border bg-background shadow-sm focus-within:ring-2 focus-within:ring-violet-500/20 focus-within:border-violet-400 transition-all'>
               <div className='flex items-center pl-2 text-muted-foreground'>
                 <Link2 className='size-4 shrink-0' />
@@ -184,7 +186,6 @@ export function UrlShortenerForm() {
               </Button>
             </div>
 
-            {/* Advanced options toggle */}
             <button
               type='button'
               onClick={() => setShowAdvanced(!showAdvanced)}
@@ -198,7 +199,6 @@ export function UrlShortenerForm() {
               {showAdvanced ? 'Hide' : 'Show'} advanced options
             </button>
 
-            {/* Advanced: custom code */}
             {showAdvanced && (
               <div className='p-4 rounded-xl border border-border/60 bg-muted/30 space-y-3'>
                 <FormField
@@ -230,7 +230,6 @@ export function UrlShortenerForm() {
               </div>
             )}
 
-            {/* Error */}
             {error && (
               <div className='flex items-center gap-2 p-3 bg-destructive/10 text-destructive rounded-xl text-sm'>
                 <AlertTriangle className='size-4 shrink-0' />
@@ -238,7 +237,6 @@ export function UrlShortenerForm() {
               </div>
             )}
 
-            {/* Result */}
             {shortUrl && (
               <Card className='border-violet-200 dark:border-violet-800 bg-violet-50/50 dark:bg-violet-950/20 overflow-hidden'>
                 <CardContent className='p-4'>
@@ -255,7 +253,6 @@ export function UrlShortenerForm() {
                       Preview <ExternalLink className='size-3' />
                     </a>
                   </div>
-
                   <div className='flex items-center gap-2'>
                     <div className='flex-1 px-3 py-2 rounded-lg bg-background border border-violet-200 dark:border-violet-700 font-mono text-sm text-violet-700 dark:text-violet-300 truncate'>
                       {shortUrl}
@@ -297,7 +294,7 @@ export function UrlShortenerForm() {
                         </p>
                         <p className='text-xs text-amber-600 dark:text-amber-400 mt-0.5'>
                           {flaggedInfo.message ||
-                            'This URL is pending admin review before becoming fully active.'}
+                            'This URL is pending admin review.'}
                         </p>
                         {flaggedInfo.reason && (
                           <p className='text-xs text-amber-600 dark:text-amber-400 mt-1'>
@@ -319,7 +316,6 @@ export function UrlShortenerForm() {
         onOpenChange={setShowSignupDialog}
         shortUrl={shortUrl || ''}
       />
-
       {shortUrl && shortCode && (
         <QRCodeModal
           isOpen={isQrCodeModalOpen}

@@ -42,7 +42,8 @@ export const authConfig: NextAuthConfig = {
       const isLoggedIn = !!auth?.user;
       if (nextUrl.pathname.startsWith('/admin'))
         return isLoggedIn && auth?.user?.role === 'admin';
-      if (nextUrl.pathname.startsWith('/dashboard')) return isLoggedIn;
+      if (nextUrl.pathname.startsWith('/dashboard'))
+        return isLoggedIn;
       return true;
     },
 
@@ -50,11 +51,11 @@ export const authConfig: NextAuthConfig = {
       // ── Credentials sign-in ──────────────────────────────────────────
       // `user` comes directly from authorize(), already verified.
       if (account?.provider === 'credentials' && user) {
-        token.id = user.id;
-        token.email = user.email;
-        token.name = user.name;
+        token.id      = user.id;
+        token.email   = user.email;
+        token.name    = user.name;
         token.picture = user.image;
-        token.role = user.role;
+        token.role    = user.role;
         return token;
       }
 
@@ -65,18 +66,16 @@ export const authConfig: NextAuthConfig = {
       if (account && profile) {
         // The email the user just authenticated with at Google/GitHub.
         // This is the ground truth — it comes directly from the provider.
-        const providerEmail = ((profile.email as string | undefined) ?? '')
-          .toLowerCase()
-          .trim();
+        const providerEmail = (
+          (profile.email as string | undefined) ?? ''
+        ).toLowerCase().trim();
 
         if (!providerEmail) {
           console.error('[auth] OAuth profile has no email');
           return token;
         }
 
-        console.log(
-          `[auth] OAuth sign-in: provider=${account.provider} email=${providerEmail} providerAccountId=${account.providerAccountId}`,
-        );
+        console.log(`[auth] OAuth sign-in: provider=${account.provider} email=${providerEmail} providerAccountId=${account.providerAccountId}`);
 
         try {
           // ── 1. Look up the account row by provider + providerAccountId ──
@@ -109,24 +108,22 @@ export const authConfig: NextAuthConfig = {
               // In that case we delete the bad row and fall through to
               // create a clean link below.
               if (linkedUser.email.toLowerCase() === providerEmail) {
-                console.log(
-                  `[auth] Found clean account link → user ${linkedUser.email}`,
-                );
-                token.id = linkedUser.id;
-                token.email = linkedUser.email;
-                token.name = linkedUser.name ?? token.name;
-                token.picture = linkedUser.image ?? token.picture;
-                token.role = linkedUser.role;
+                console.log(`[auth] Found clean account link → user ${linkedUser.email}`);
+                token.id      = linkedUser.id;
+                token.email   = linkedUser.email;
+                token.name    = linkedUser.name    ?? token.name;
+                token.picture = linkedUser.image   ?? token.picture;
+                token.role    = linkedUser.role;
                 return token;
               }
 
               // Corrupt link detected — delete it so we can recreate correctly
               console.warn(
                 `[auth] CORRUPT account link detected! ` +
-                  `provider_account_id=${account.providerAccountId} ` +
-                  `pointed to user ${linkedUser.email} ` +
-                  `but Google says the signed-in email is ${providerEmail}. ` +
-                  `Deleting bad link and recreating.`,
+                `provider_account_id=${account.providerAccountId} ` +
+                `pointed to user ${linkedUser.email} ` +
+                `but Google says the signed-in email is ${providerEmail}. ` +
+                `Deleting bad link and recreating.`
               );
               await db
                 .delete(accounts)
@@ -155,14 +152,12 @@ export const authConfig: NextAuthConfig = {
             const [created] = await db
               .insert(users)
               .values({
-                id: nanoid(),
-                email: providerEmail,
-                name: (profile.name as string | undefined) ?? null,
-                image:
-                  (profile.picture as string | undefined) ??
-                  (profile.avatar_url as string | undefined) ??
-                  null,
-                role: 'user',
+                id:        nanoid(),
+                email:     providerEmail,
+                name:      (profile.name as string | undefined) ?? null,
+                image:     (profile.picture as string | undefined) ??
+                           (profile.avatar_url as string | undefined) ?? null,
+                role:      'user',
                 createdAt: new Date(),
                 updatedAt: new Date(),
               })
@@ -173,34 +168,30 @@ export const authConfig: NextAuthConfig = {
           // ── 3. Create the account link ───────────────────────────────
           // onConflictDoNothing makes this safe to call even if the row
           // somehow already exists (race condition safety).
-          console.log(
-            `[auth] Linking provider ${account.provider} → user ${dbUser.email}`,
-          );
+          console.log(`[auth] Linking provider ${account.provider} → user ${dbUser.email}`);
           await db
             .insert(accounts)
             .values({
-              userId: dbUser.id,
-              type: 'oauth',
-              provider: account.provider,
+              userId:            dbUser.id,
+              type:              'oauth',
+              provider:          account.provider,
               providerAccountId: account.providerAccountId,
-              access_token: account.access_token ?? null,
-              refresh_token: account.refresh_token ?? null,
-              expires_at: account.expires_at ?? null,
-              token_type: account.token_type ?? null,
-              scope: account.scope ?? null,
-              id_token: account.id_token ?? null,
+              access_token:      account.access_token  ?? null,
+              refresh_token:     account.refresh_token ?? null,
+              expires_at:        account.expires_at    ?? null,
+              token_type:        account.token_type    ?? null,
+              scope:             account.scope         ?? null,
+              id_token:          account.id_token      ?? null,
             })
             .onConflictDoNothing();
 
-          token.id = dbUser.id;
-          token.email = dbUser.email;
-          token.name = dbUser.name ?? token.name;
-          token.picture = dbUser.image ?? token.picture;
-          token.role = dbUser.role;
+          token.id      = dbUser.id;
+          token.email   = dbUser.email;
+          token.name    = dbUser.name    ?? token.name;
+          token.picture = dbUser.image   ?? token.picture;
+          token.role    = dbUser.role;
 
-          console.log(
-            `[auth] Token set for user ${dbUser.email} (id: ${dbUser.id})`,
-          );
+          console.log(`[auth] Token set for user ${dbUser.email} (id: ${dbUser.id})`);
         } catch (err) {
           console.error('[auth] OAuth jwt callback error:', err);
         }
@@ -214,10 +205,10 @@ export const authConfig: NextAuthConfig = {
     },
 
     async session({ session, token }) {
-      session.user.id = token.id as string;
-      session.user.role = token.role;
+      session.user.id    = token.id    as string;
+      session.user.role  = token.role;
       session.user.email = token.email as string;
-      session.user.name = token.name as string;
+      session.user.name  = token.name  as string;
       session.user.image = token.picture as string | null | undefined;
       return session;
     },
@@ -225,17 +216,17 @@ export const authConfig: NextAuthConfig = {
 
   providers: [
     Google({
-      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientId:     process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     }),
     GitHub({
-      clientId: process.env.GITHUB_CLIENT_ID,
+      clientId:     process.env.GITHUB_CLIENT_ID,
       clientSecret: process.env.GITHUB_CLIENT_SECRET,
     }),
     CredentialsProvider({
       name: 'Credentials',
       credentials: {
-        email: { label: 'Email', type: 'email' },
+        email:    { label: 'Email',    type: 'email' },
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
@@ -256,11 +247,11 @@ export const authConfig: NextAuthConfig = {
         if (!ok) return null;
 
         return {
-          id: user.id,
+          id:    user.id,
           email: user.email,
-          name: user.name,
+          name:  user.name,
           image: user.image,
-          role: user.role,
+          role:  user.role,
         };
       },
     }),
