@@ -11,11 +11,18 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { BarChart3, Link2, MousePointerClick, Shield, Zap, ArrowRight } from 'lucide-react';
+import {
+  BarChart3,
+  Link2,
+  MousePointerClick,
+  Shield,
+  Zap,
+  ArrowRight,
+} from 'lucide-react';
 
 export const metadata: Metadata = {
-  title: 'Statistics | ShortLink',
-  description: 'Live statistics for the ShortLink platform',
+  title: 'Statistics | Shortify',
+  description: 'Live statistics for the Shortify platform',
 };
 
 export default async function PublicStatsPage() {
@@ -30,17 +37,19 @@ export default async function PublicStatsPage() {
   const stats = [
     {
       label: 'Total URLs Shortened',
-      description: 'Links created through ShortLink',
+      description: 'Links created through Shortify',
       value: totalUrls.toLocaleString(),
       icon: <Link2 className='size-5' />,
-      accent: 'text-violet-600 dark:text-violet-400 bg-violet-100 dark:bg-violet-900/30',
+      accent:
+        'text-violet-600 dark:text-violet-400 bg-violet-100 dark:bg-violet-900/30',
     },
     {
       label: 'Total Clicks',
       description: 'Redirects processed by our service',
       value: totalClicks.toLocaleString(),
       icon: <MousePointerClick className='size-5' />,
-      accent: 'text-fuchsia-600 dark:text-fuchsia-400 bg-fuchsia-100 dark:bg-fuchsia-900/30',
+      accent:
+        'text-fuchsia-600 dark:text-fuchsia-400 bg-fuchsia-100 dark:bg-fuchsia-900/30',
     },
   ];
 
@@ -69,7 +78,6 @@ export default async function PublicStatsPage() {
       <div className='absolute -top-40 left-1/2 -translate-x-1/2 w-[600px] h-[400px] rounded-full bg-gradient-to-br from-violet-500/10 via-fuchsia-500/10 to-pink-500/10 dark:from-violet-500/15 dark:via-fuchsia-500/10 dark:to-pink-500/10 blur-3xl -z-10' />
 
       <div className='container max-w-4xl mx-auto py-16 px-4'>
-
         {/* Header */}
         <div className='text-center mb-12'>
           <div className='inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/50 text-violet-600 dark:text-violet-400 text-sm font-medium mb-6'>
@@ -77,7 +85,7 @@ export default async function PublicStatsPage() {
             Live Platform Stats
           </div>
           <h1 className='text-4xl font-bold tracking-tight mb-3 bg-gradient-to-br from-foreground via-foreground/90 to-foreground/60 bg-clip-text text-transparent'>
-            ShortLink by the numbers
+            Shortify by the numbers
           </h1>
           <p className='text-muted-foreground max-w-md mx-auto'>
             Real-time statistics from our URL shortening platform
@@ -92,7 +100,9 @@ export default async function PublicStatsPage() {
               className='shadow-sm border-border/60 rounded-2xl hover:border-border hover:shadow-md transition-all duration-200'
             >
               <CardHeader className='pb-2'>
-                <div className={`inline-flex p-2.5 rounded-xl w-fit mb-2 ${stat.accent}`}>
+                <div
+                  className={`inline-flex p-2.5 rounded-xl w-fit mb-2 ${stat.accent}`}
+                >
                   {stat.icon}
                 </div>
                 <CardTitle className='text-lg'>{stat.label}</CardTitle>

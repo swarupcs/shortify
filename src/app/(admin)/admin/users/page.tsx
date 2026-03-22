@@ -9,7 +9,7 @@ import { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "User Management | Admin | ShortLink" };
+export const metadata: Metadata = { title: "User Management | Admin | Shortify" };
 
 export default async function UserManagementPage({ searchParams }: { searchParams: Promise<{ page?: string; search?: string; sortBy?: string; sortOrder?: string; }> }) {
   const session = await auth();

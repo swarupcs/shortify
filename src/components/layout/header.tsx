@@ -54,7 +54,7 @@ export function Header() {
             <Link2 className='size-4' />
           </div>
           <span className='bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent'>
-            ShortLink
+            Shortify
           </span>
         </Link>
 
@@ -189,7 +189,7 @@ export function Header() {
                   <div className='size-7 rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center text-white'>
                     <Link2 className='size-3.5' />
                   </div>
-                  ShortLink
+                  Shortify
                 </SheetTitle>
               </SheetHeader>
               <nav className='flex flex-col gap-1 mt-6'>
