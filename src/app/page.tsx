@@ -1,81 +1,90 @@
-import { UrlShortenerForm } from '@/components/urls/url-shortener-form';
+import { auth } from '@/server/auth';
+import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import {
   ArrowRight,
   BarChart3,
   Globe,
-  Shield,
-  Zap,
   Link2,
+  Shield,
   Sparkles,
+  Zap,
 } from 'lucide-react';
-import Link from 'next/link';
-import { auth } from '@/server/auth';
-import { redirect } from 'next/navigation';
 
 const features = [
   {
     icon: <Zap className='size-5' />,
     title: 'Instant Shortening',
-    description:
-      'Generate short links in milliseconds with AI-powered safety checks.',
+    description: 'Generate short links in milliseconds with AI safety checks.',
     accent:
       'bg-amber-100 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400',
   },
   {
     icon: <Shield className='size-5' />,
     title: 'AI Safety Scan',
-    description:
-      'Every URL is analyzed by Gemini AI before shortening to protect users.',
+    description: 'Every URL analyzed by Gemini AI to protect your users.',
     accent:
       'bg-emerald-100 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400',
   },
   {
     icon: <BarChart3 className='size-5' />,
     title: 'Click Analytics',
-    description:
-      'Track performance with real-time click counts and engagement metrics.',
+    description: 'Track performance with real-time click counts.',
     accent: 'bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400',
   },
   {
     icon: <Globe className='size-5' />,
     title: 'Custom Codes',
-    description: 'Brand your links with memorable custom short codes.',
+    description: 'Brand your links with memorable short codes.',
     accent:
       'bg-violet-100 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400',
   },
 ];
 
+const stats = [
+  { label: 'Links Shortened', value: '1M+' },
+  { label: 'Clicks Tracked', value: '50M+' },
+  { label: 'Uptime', value: '99.9%' },
+];
+
 export default async function Home() {
   const session = await auth();
 
-  // Redirect authenticated users straight to their dashboard
+  // Logged-in users go straight to their dashboard
   if (session?.user) {
     redirect('/dashboard');
   }
 
   return (
     <div className='relative overflow-hidden'>
-      {/* Background grid pattern */}
+      {/* ── Background grid ── */}
       <div
-        className='absolute inset-0 -z-10 opacity-[0.03] dark:opacity-[0.07]'
+        className='absolute inset-0 -z-10 opacity-[0.03] dark:opacity-[0.06]'
         style={{
-          backgroundImage: `linear-gradient(var(--foreground) 1px, transparent 1px), linear-gradient(90deg, var(--foreground) 1px, transparent 1px)`,
+          backgroundImage: `linear-gradient(var(--foreground) 1px, transparent 1px),
+                            linear-gradient(90deg, var(--foreground) 1px, transparent 1px)`,
           backgroundSize: '40px 40px',
         }}
       />
 
-      {/* Hero gradient blob */}
+      {/* ── Hero gradient blob ── */}
       <div className='absolute -top-40 left-1/2 -translate-x-1/2 w-[800px] h-[500px] rounded-full bg-gradient-to-br from-violet-500/10 via-fuchsia-500/10 to-pink-500/10 dark:from-violet-500/20 dark:via-fuchsia-500/15 dark:to-pink-500/10 blur-3xl -z-10' />
 
-      {/* Hero */}
+      {/* ══════════════════════════════════════════
+          HERO
+      ══════════════════════════════════════════ */}
       <section className='container max-w-5xl mx-auto px-4 pt-20 pb-16 text-center'>
+        {/* Badge */}
         <div className='inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/50 text-violet-600 dark:text-violet-400 text-sm font-medium mb-8'>
           <Sparkles className='size-3.5' />
           AI-Powered URL Safety
         </div>
 
-        <h1 className='text-5xl md:text-7xl font-bold tracking-tight mb-6 bg-gradient-to-br from-foreground via-foreground/90 to-foreground/60 bg-clip-text text-transparent leading-[1.1]'>
-          Shorten. Share.
+        {/* Headline */}
+        <h1 className='text-5xl md:text-7xl font-bold tracking-tight mb-6 leading-[1.1]'>
+          <span className='bg-gradient-to-br from-foreground via-foreground/90 to-foreground/60 bg-clip-text text-transparent'>
+            Shorten. Share.
+          </span>
           <br />
           <span className='bg-gradient-to-r from-violet-600 to-fuchsia-600 dark:from-violet-400 dark:to-fuchsia-400 bg-clip-text text-transparent'>
             Stay Safe.
@@ -87,33 +96,49 @@ export default async function Home() {
           by AI to keep you and your users safe from malicious content.
         </p>
 
-        <div className='max-w-2xl mx-auto'>
-          <UrlShortenerForm />
-        </div>
+        {/* ── PRIMARY CTA — Login / Register ── */}
+        <div className='flex flex-col sm:flex-row items-center justify-center gap-4 mb-6'>
+          {/* Login — primary */}
+          <Link
+            href='/login'
+            className='group inline-flex items-center gap-2.5 px-8 py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white font-semibold text-base shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 transition-all duration-200 hover:-translate-y-0.5'
+          >
+            <Link2 className='size-5' />
+            Sign in to get started
+            <ArrowRight className='size-4 transition-transform group-hover:translate-x-1' />
+          </Link>
 
-        <p className='mt-6 text-sm text-muted-foreground'>
-          No account needed to get started.{' '}
+          {/* Register — secondary */}
           <Link
             href='/register'
-            className='text-violet-600 dark:text-violet-400 hover:underline font-medium'
+            className='inline-flex items-center gap-2 px-8 py-4 rounded-2xl border border-border/60 bg-background hover:bg-muted/60 text-foreground font-semibold text-base transition-all duration-200 hover:-translate-y-0.5'
           >
-            Sign up free
-          </Link>{' '}
-          to save and track links.
+            Create free account
+          </Link>
+        </div>
+
+        <p className='text-sm text-muted-foreground'>
+          Free forever. No credit card required.{' '}
+          <Link
+            href='/stats'
+            className='text-violet-600 dark:text-violet-400 hover:underline underline-offset-4'
+          >
+            View public stats →
+          </Link>
         </p>
       </section>
 
-      {/* Stats bar */}
+      {/* ══════════════════════════════════════════
+          STATS BAR
+      ══════════════════════════════════════════ */}
       <section className='border-y border-border/50 bg-muted/30'>
         <div className='container max-w-5xl mx-auto px-4 py-6'>
           <div className='grid grid-cols-3 divide-x divide-border/50'>
-            {[
-              { label: 'Links Shortened', value: '1M+' },
-              { label: 'Clicks Tracked', value: '50M+' },
-              { label: 'Uptime', value: '99.9%' },
-            ].map((stat) => (
+            {stats.map((stat) => (
               <div key={stat.label} className='text-center px-4'>
-                <p className='text-2xl md:text-3xl font-bold'>{stat.value}</p>
+                <p className='text-2xl md:text-3xl font-bold bg-gradient-to-r from-violet-600 to-fuchsia-600 dark:from-violet-400 dark:to-fuchsia-400 bg-clip-text text-transparent'>
+                  {stat.value}
+                </p>
                 <p className='text-sm text-muted-foreground mt-1'>
                   {stat.label}
                 </p>
@@ -123,7 +148,9 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* Features */}
+      {/* ══════════════════════════════════════════
+          FEATURES
+      ══════════════════════════════════════════ */}
       <section className='container max-w-5xl mx-auto px-4 py-20'>
         <div className='text-center mb-14'>
           <h2 className='text-3xl md:text-4xl font-bold mb-4'>
@@ -155,9 +182,12 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* CTA */}
+      {/* ══════════════════════════════════════════
+          BOTTOM CTA BANNER
+      ══════════════════════════════════════════ */}
       <section className='container max-w-5xl mx-auto px-4 pb-24'>
         <div className='relative rounded-3xl overflow-hidden bg-gradient-to-br from-violet-600 to-fuchsia-700 dark:from-violet-800 dark:to-fuchsia-900 p-12 text-center text-white'>
+          {/* Dot pattern overlay */}
           <div
             className='absolute inset-0 opacity-10 pointer-events-none'
             style={{
@@ -165,25 +195,30 @@ export default async function Home() {
               backgroundSize: '32px 32px',
             }}
           />
+
           <Link2 className='size-10 mx-auto mb-4 opacity-80' />
           <h2 className='text-3xl font-bold mb-3'>Ready to get started?</h2>
           <p className='text-white/70 mb-8 max-w-md mx-auto'>
             Join thousands of users who trust ShortLink to manage their links
             safely.
           </p>
+
           <div className='flex flex-col sm:flex-row gap-3 justify-center'>
+            {/* Primary — Login */}
             <Link
-              href='/register'
+              href='/login'
               className='inline-flex items-center gap-2 px-6 py-3 bg-white text-violet-700 font-semibold rounded-xl hover:bg-white/90 transition-colors'
             >
-              Create Free Account
+              Sign in
               <ArrowRight className='size-4' />
             </Link>
+
+            {/* Secondary — Register */}
             <Link
-              href='/stats'
+              href='/register'
               className='inline-flex items-center gap-2 px-6 py-3 bg-white/10 text-white font-semibold rounded-xl hover:bg-white/20 transition-colors border border-white/20'
             >
-              View Public Stats
+              Create free account
             </Link>
           </div>
         </div>
