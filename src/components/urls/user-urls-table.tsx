@@ -13,6 +13,10 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  AlertTriangle,
+  Clock,
+  Lock,
+  CheckCircle2,
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { Button } from '../ui/button';
@@ -24,47 +28,92 @@ import { QRCodeModal } from '../modals/qr-code-modal';
 import { EditUrlModal } from '../modals/edit-url-modal';
 import { BASEURL } from '@/lib/const';
 import { cn } from '@/lib/utils';
-
-interface Url {
-  id: number;
-  originalUrl: string;
-  shortCode: string;
-  createdAt: Date;
-  clicks: number;
-}
+import type { UserUrl } from '@/server/actions/urls/get-user-urls';
 
 interface UserUrlsTableProps {
-  urls: Url[];
+  urls: UserUrl[];
   onRefresh?: () => void;
 }
 
 type SortField = 'shortCode' | 'clicks' | 'createdAt' | 'originalUrl';
 type SortOrder = 'asc' | 'desc';
 
+// ── Status badge ────────────────────────────────────────────────────────────
+
+type UrlStatus = 'active' | 'flagged' | 'expired' | 'protected';
+
+function getUrlStatus(url: UserUrl): UrlStatus {
+  if (url.flagged) return 'flagged';
+  if (url.expiresAt && new Date(url.expiresAt) < new Date()) return 'expired';
+  if (url.passwordHash) return 'protected';
+  return 'active';
+}
+
+const STATUS_CONFIG: Record<
+  UrlStatus,
+  { label: string; icon: React.ReactNode; className: string }
+> = {
+  active: {
+    label: 'Active',
+    icon: <CheckCircle2 className='size-3' />,
+    className:
+      'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800',
+  },
+  flagged: {
+    label: 'Flagged',
+    icon: <AlertTriangle className='size-3' />,
+    className:
+      'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800',
+  },
+  expired: {
+    label: 'Expired',
+    icon: <Clock className='size-3' />,
+    className:
+      'bg-muted text-muted-foreground border-border/60',
+  },
+  protected: {
+    label: 'Protected',
+    icon: <Lock className='size-3' />,
+    className:
+      'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400 border-violet-200 dark:border-violet-800',
+  },
+};
+
+function StatusBadge({ url }: { url: UserUrl }) {
+  const status = getUrlStatus(url);
+  const config = STATUS_CONFIG[status];
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border',
+        config.className,
+      )}
+    >
+      {config.icon}
+      {config.label}
+    </span>
+  );
+}
+
+// ── Table ────────────────────────────────────────────────────────────────────
+
 export function UserUrlsTable({ urls, onRefresh }: UserUrlsTableProps) {
   const [isDeleting, setIsDeleting] = useState<number | null>(null);
-  const [localUrls, setLocalUrls] = useState<Url[]>(urls);
-  const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
-  const [qrCodeShortCode, setQrCodeShortCode] = useState<string>('');
+  const [localUrls, setLocalUrls] = useState<UserUrl[]>(urls);
+  const [qrCodeUrl, setQrCodeUrl] = useState('');
+  const [qrCodeShortCode, setQrCodeShortCode] = useState('');
   const [isQrCodeModalOpen, setIsQrCodeModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [urlToEdit, setUrlToEdit] = useState<{
-    id: number;
-    shortCode: string;
-  } | null>(null);
+  const [urlToEdit, setUrlToEdit] = useState<{ id: number; shortCode: string } | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
-
-  // Search & sort state
   const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState<SortField>('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
   const baseUrl = BASEURL;
 
-  // Keep localUrls in sync when parent re-fetches
-  useMemo(() => {
-    setLocalUrls(urls);
-  }, [urls]);
+  // Sync when parent re-fetches
+  useMemo(() => { setLocalUrls(urls); }, [urls]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -76,18 +125,14 @@ export function UserUrlsTable({ urls, onRefresh }: UserUrlsTableProps) {
   };
 
   const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field)
-      return <ArrowUpDown className='size-3.5 opacity-40' />;
-    return sortOrder === 'asc' ? (
-      <ArrowUp className='size-3.5' />
-    ) : (
-      <ArrowDown className='size-3.5' />
-    );
+    if (sortField !== field) return <ArrowUpDown className='size-3.5 opacity-40' />;
+    return sortOrder === 'asc'
+      ? <ArrowUp className='size-3.5' />
+      : <ArrowDown className='size-3.5' />;
   };
 
   const filteredAndSorted = useMemo(() => {
     let filtered = localUrls;
-
     if (search.trim()) {
       const q = search.toLowerCase();
       filtered = filtered.filter(
@@ -96,38 +141,18 @@ export function UserUrlsTable({ urls, onRefresh }: UserUrlsTableProps) {
           u.originalUrl.toLowerCase().includes(q),
       );
     }
-
     return [...filtered].sort((a, b) => {
       let vA: string | number | Date;
       let vB: string | number | Date;
-
       switch (sortField) {
-        case 'shortCode':
-          vA = a.shortCode;
-          vB = b.shortCode;
-          break;
-        case 'clicks':
-          vA = a.clicks;
-          vB = b.clicks;
-          break;
-        case 'createdAt':
-          vA = a.createdAt;
-          vB = b.createdAt;
-          break;
-        case 'originalUrl':
-          vA = a.originalUrl;
-          vB = b.originalUrl;
-          break;
-        default:
-          return 0;
+        case 'shortCode': vA = a.shortCode; vB = b.shortCode; break;
+        case 'clicks': vA = a.clicks; vB = b.clicks; break;
+        case 'createdAt': vA = a.createdAt; vB = b.createdAt; break;
+        case 'originalUrl': vA = a.originalUrl; vB = b.originalUrl; break;
+        default: return 0;
       }
-
-      if (typeof vA === 'string' && typeof vB === 'string') {
-        return sortOrder === 'asc'
-          ? vA.localeCompare(vB)
-          : vB.localeCompare(vA);
-      }
-
+      if (typeof vA === 'string' && typeof vB === 'string')
+        return sortOrder === 'asc' ? vA.localeCompare(vB) : vB.localeCompare(vA);
       if (vA < vB) return sortOrder === 'asc' ? -1 : 1;
       if (vA > vB) return sortOrder === 'asc' ? 1 : -1;
       return 0;
@@ -150,8 +175,7 @@ export function UserUrlsTable({ urls, onRefresh }: UserUrlsTableProps) {
     try {
       const response = await deleteUrl(id);
       if (response.success) {
-        // Optimistic removal — no router.refresh() needed
-        setLocalUrls((prev) => prev.filter((url) => url.id !== id));
+        setLocalUrls((prev) => prev.filter((u) => u.id !== id));
         toast.success('Link deleted');
         onRefresh?.();
       } else {
@@ -178,9 +202,7 @@ export function UserUrlsTable({ urls, onRefresh }: UserUrlsTableProps) {
   const handleEditSuccess = (newShortCode: string) => {
     if (!urlToEdit) return;
     setLocalUrls((prev) =>
-      prev.map((url) =>
-        url.id === urlToEdit.id ? { ...url, shortCode: newShortCode } : url,
-      ),
+      prev.map((u) => u.id === urlToEdit.id ? { ...u, shortCode: newShortCode } : u),
     );
   };
 
@@ -222,8 +244,7 @@ export function UserUrlsTable({ urls, onRefresh }: UserUrlsTableProps) {
         {search && (
           <p className='text-xs text-muted-foreground mt-1.5'>
             {filteredAndSorted.length} result
-            {filteredAndSorted.length !== 1 ? 's' : ''} for &ldquo;{search}
-            &rdquo;
+            {filteredAndSorted.length !== 1 ? 's' : ''} for &ldquo;{search}&rdquo;
           </p>
         )}
       </div>
@@ -234,39 +255,26 @@ export function UserUrlsTable({ urls, onRefresh }: UserUrlsTableProps) {
           <thead>
             <tr className='border-b border-border/60'>
               <th className='text-left px-4 py-3'>
-                <button
-                  onClick={() => handleSort('originalUrl')}
-                  className='flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors'
-                >
-                  Original URL
-                  <SortIcon field='originalUrl' />
+                <button onClick={() => handleSort('originalUrl')} className='flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors'>
+                  Original URL <SortIcon field='originalUrl' />
                 </button>
               </th>
               <th className='text-left px-4 py-3'>
-                <button
-                  onClick={() => handleSort('shortCode')}
-                  className='flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors'
-                >
-                  Short Link
-                  <SortIcon field='shortCode' />
+                <button onClick={() => handleSort('shortCode')} className='flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors'>
+                  Short Link <SortIcon field='shortCode' />
+                </button>
+              </th>
+              <th className='text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide'>
+                Status
+              </th>
+              <th className='text-left px-4 py-3'>
+                <button onClick={() => handleSort('clicks')} className='flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors'>
+                  Clicks <SortIcon field='clicks' />
                 </button>
               </th>
               <th className='text-left px-4 py-3'>
-                <button
-                  onClick={() => handleSort('clicks')}
-                  className='flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors'
-                >
-                  Clicks
-                  <SortIcon field='clicks' />
-                </button>
-              </th>
-              <th className='text-left px-4 py-3'>
-                <button
-                  onClick={() => handleSort('createdAt')}
-                  className='flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors'
-                >
-                  Created
-                  <SortIcon field='createdAt' />
+                <button onClick={() => handleSort('createdAt')} className='flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors'>
+                  Created <SortIcon field='createdAt' />
                 </button>
               </th>
               <th className='text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide w-32'>
@@ -277,25 +285,17 @@ export function UserUrlsTable({ urls, onRefresh }: UserUrlsTableProps) {
           <tbody className='divide-y divide-border/40'>
             {filteredAndSorted.length === 0 ? (
               <tr>
-                <td
-                  colSpan={5}
-                  className='px-4 py-10 text-center text-sm text-muted-foreground'
-                >
+                <td colSpan={6} className='px-4 py-10 text-center text-sm text-muted-foreground'>
                   No links match &ldquo;{search}&rdquo;
                 </td>
               </tr>
             ) : (
               filteredAndSorted.map((url) => (
-                <tr
-                  key={url.id}
-                  className='group hover:bg-muted/30 transition-colors'
-                >
+                <tr key={url.id} className='group hover:bg-muted/30 transition-colors'>
+                  {/* Original URL */}
                   <td className='px-4 py-3'>
                     <div className='flex items-center gap-2 max-w-xs'>
-                      <span
-                        className='text-sm text-muted-foreground truncate'
-                        title={url.originalUrl}
-                      >
+                      <span className='text-sm text-muted-foreground truncate' title={url.originalUrl}>
                         {url.originalUrl}
                       </span>
                       <a
@@ -308,21 +308,32 @@ export function UserUrlsTable({ urls, onRefresh }: UserUrlsTableProps) {
                       </a>
                     </div>
                   </td>
+
+                  {/* Short code */}
                   <td className='px-4 py-3'>
                     <span className='font-mono text-sm font-medium text-violet-600 dark:text-violet-400'>
                       /r/{url.shortCode}
                     </span>
                   </td>
+
+                  {/* Status badge */}
+                  <td className='px-4 py-3'>
+                    <StatusBadge url={url} />
+                  </td>
+
+                  {/* Clicks */}
                   <td className='px-4 py-3'>
                     <span className='inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground'>
                       {url.clicks}
                     </span>
                   </td>
+
+                  {/* Created */}
                   <td className='px-4 py-3 text-sm text-muted-foreground'>
-                    {formatDistanceToNow(new Date(url.createdAt), {
-                      addSuffix: true,
-                    })}
+                    {formatDistanceToNow(new Date(url.createdAt), { addSuffix: true })}
                   </td>
+
+                  {/* Actions */}
                   <td className='px-4 py-3'>
                     <div className='flex items-center justify-end gap-1'>
                       <Button
@@ -336,26 +347,12 @@ export function UserUrlsTable({ urls, onRefresh }: UserUrlsTableProps) {
                         )}
                         onClick={() => copyToClipboard(url.id, url.shortCode)}
                       >
-                        {copiedId === url.id ? (
-                          <Check className='size-3.5' />
-                        ) : (
-                          <Copy className='size-3.5' />
-                        )}
+                        {copiedId === url.id ? <Check className='size-3.5' /> : <Copy className='size-3.5' />}
                       </Button>
-                      <Button
-                        variant='ghost'
-                        size='icon'
-                        className='size-7 text-muted-foreground hover:text-foreground'
-                        onClick={() => showQrCode(url.shortCode)}
-                      >
+                      <Button variant='ghost' size='icon' className='size-7 text-muted-foreground hover:text-foreground' onClick={() => showQrCode(url.shortCode)}>
                         <QrCode className='size-3.5' />
                       </Button>
-                      <Button
-                        variant='ghost'
-                        size='icon'
-                        className='size-7 text-muted-foreground hover:text-violet-600 dark:hover:text-violet-400'
-                        onClick={() => handleEdit(url.id, url.shortCode)}
-                      >
+                      <Button variant='ghost' size='icon' className='size-7 text-muted-foreground hover:text-violet-600 dark:hover:text-violet-400' onClick={() => handleEdit(url.id, url.shortCode)}>
                         <Edit className='size-3.5' />
                       </Button>
                       <Button
@@ -365,11 +362,9 @@ export function UserUrlsTable({ urls, onRefresh }: UserUrlsTableProps) {
                         onClick={() => handleDelete(url.id)}
                         disabled={isDeleting === url.id}
                       >
-                        {isDeleting === url.id ? (
-                          <span className='size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent' />
-                        ) : (
-                          <Trash2Icon className='size-3.5' />
-                        )}
+                        {isDeleting === url.id
+                          ? <span className='size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent' />
+                          : <Trash2Icon className='size-3.5' />}
                       </Button>
                     </div>
                   </td>
@@ -398,9 +393,12 @@ export function UserUrlsTable({ urls, onRefresh }: UserUrlsTableProps) {
                     {url.originalUrl}
                   </p>
                 </div>
-                <span className='shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground'>
-                  {url.clicks} clicks
-                </span>
+                <div className='flex items-center gap-2 shrink-0'>
+                  <StatusBadge url={url} />
+                  <span className='inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground'>
+                    {url.clicks}
+                  </span>
+                </div>
               </div>
               <div className='flex items-center gap-2'>
                 <Button
@@ -409,32 +407,14 @@ export function UserUrlsTable({ urls, onRefresh }: UserUrlsTableProps) {
                   className='flex-1 h-8 text-xs'
                   onClick={() => copyToClipboard(url.id, url.shortCode)}
                 >
-                  {copiedId === url.id ? (
-                    <>
-                      <Check className='size-3 mr-1' />
-                      Copied!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className='size-3 mr-1' />
-                      Copy
-                    </>
-                  )}
+                  {copiedId === url.id
+                    ? <><Check className='size-3 mr-1' />Copied!</>
+                    : <><Copy className='size-3 mr-1' />Copy</>}
                 </Button>
-                <Button
-                  variant='outline'
-                  size='icon'
-                  className='size-8'
-                  onClick={() => showQrCode(url.shortCode)}
-                >
+                <Button variant='outline' size='icon' className='size-8' onClick={() => showQrCode(url.shortCode)}>
                   <QrCode className='size-3.5' />
                 </Button>
-                <Button
-                  variant='outline'
-                  size='icon'
-                  className='size-8'
-                  onClick={() => handleEdit(url.id, url.shortCode)}
-                >
+                <Button variant='outline' size='icon' className='size-8' onClick={() => handleEdit(url.id, url.shortCode)}>
                   <Edit className='size-3.5' />
                 </Button>
                 <Button
@@ -452,12 +432,7 @@ export function UserUrlsTable({ urls, onRefresh }: UserUrlsTableProps) {
         )}
       </div>
 
-      <QRCodeModal
-        isOpen={isQrCodeModalOpen}
-        onOpenChange={setIsQrCodeModalOpen}
-        url={qrCodeUrl}
-        shortCode={qrCodeShortCode}
-      />
+      <QRCodeModal isOpen={isQrCodeModalOpen} onOpenChange={setIsQrCodeModalOpen} url={qrCodeUrl} shortCode={qrCodeShortCode} />
       {urlToEdit && (
         <EditUrlModal
           isOpen={isEditModalOpen}

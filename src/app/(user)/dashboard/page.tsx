@@ -18,7 +18,7 @@ import { AnalyticsTab } from '@/components/dashboard/analytics-tab';
 import { BulkShortenTab } from '@/components/dashboard/bulk-shorten-tab';
 import { LinkInBioTab } from '@/components/dashboard/link-in-bio-tab';
 import { DashboardTabs } from '@/components/dashboard/dashboard-tabs';
-import { getUserUrls } from '@/server/actions/urls/get-user-urls';
+import { getUserUrls, type UserUrl } from '@/server/actions/urls/get-user-urls';
 
 import {
   BarChart3,
@@ -37,15 +37,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [userUrls, setUserUrls] = useState<
-    Array<{
-      id: number;
-      originalUrl: string;
-      shortCode: string;
-      createdAt: Date;
-      clicks: number;
-    }>
-  >([]);
+  const [userUrls, setUserUrls] = useState<UserUrl[]>([]);
   const [loading, setLoading] = useState(true);
 
   const activeTab = (searchParams.get('tab') as TabId) || 'links';
@@ -84,32 +76,28 @@ export default function DashboardPage() {
       label: 'Total Links',
       value: userUrls.length,
       icon: <Link2 className='size-4' />,
-      accent:
-        'text-violet-600 dark:text-violet-400 bg-violet-100 dark:bg-violet-900/30',
+      accent: 'text-violet-600 dark:text-violet-400 bg-violet-100 dark:bg-violet-900/30',
       change: null,
     },
     {
       label: 'Total Clicks',
       value: totalClicks.toLocaleString(),
       icon: <MousePointerClick className='size-4' />,
-      accent:
-        'text-fuchsia-600 dark:text-fuchsia-400 bg-fuchsia-100 dark:bg-fuchsia-900/30',
+      accent: 'text-fuchsia-600 dark:text-fuchsia-400 bg-fuchsia-100 dark:bg-fuchsia-900/30',
       change: null,
     },
     {
       label: 'Avg. Clicks',
       value: avgClicks,
       icon: <BarChart3 className='size-4' />,
-      accent:
-        'text-violet-600 dark:text-violet-400 bg-violet-100 dark:bg-violet-900/30',
+      accent: 'text-violet-600 dark:text-violet-400 bg-violet-100 dark:bg-violet-900/30',
       change: null,
     },
     {
       label: 'Top Link',
       value: topUrl?.clicks ?? 0,
       icon: <TrendingUp className='size-4' />,
-      accent:
-        'text-fuchsia-600 dark:text-fuchsia-400 bg-fuchsia-100 dark:bg-fuchsia-900/30',
+      accent: 'text-fuchsia-600 dark:text-fuchsia-400 bg-fuchsia-100 dark:bg-fuchsia-900/30',
       change: topUrl ? topUrl.shortCode : '—',
     },
   ];
@@ -119,9 +107,7 @@ export default function DashboardPage() {
       <div className='flex justify-center items-center min-h-[400px]'>
         <div className='flex flex-col items-center gap-3'>
           <Loader2 className='size-8 animate-spin text-violet-600 dark:text-violet-400' />
-          <p className='text-sm text-muted-foreground'>
-            Loading your dashboard…
-          </p>
+          <p className='text-sm text-muted-foreground'>Loading your dashboard…</p>
         </div>
       </div>
     );
@@ -150,7 +136,7 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      {/* ── Stats grid (only when there are links) ── */}
+      {/* ── Stats grid ── */}
       {userUrls.length > 0 && (
         <div className='grid grid-cols-2 lg:grid-cols-4 gap-3'>
           {stats.map((stat) => (
@@ -175,7 +161,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── URL Shortener form — always visible ── */}
+      {/* ── URL Shortener form ── */}
       <Card className='border-border/60 shadow-sm rounded-2xl overflow-hidden'>
         <CardHeader className='pb-4 border-b border-border/60 bg-muted/20'>
           <div className='flex items-center gap-2'>
@@ -197,11 +183,7 @@ export default function DashboardPage() {
 
       {/* ── Tabs ── */}
       <div>
-        <DashboardTabs
-          activeTab={activeTab}
-          onTabChange={setTab}
-          linkCount={userUrls.length}
-        />
+        <DashboardTabs activeTab={activeTab} onTabChange={setTab} linkCount={userUrls.length} />
 
         <div className='mt-4'>
           {activeTab === 'links' && (
@@ -214,8 +196,7 @@ export default function DashboardPage() {
                       Your Links
                     </CardTitle>
                     <CardDescription className='text-xs mt-0.5'>
-                      {userUrls.length} link
-                      {userUrls.length !== 1 ? 's' : ''} created
+                      {userUrls.length} link{userUrls.length !== 1 ? 's' : ''} created
                     </CardDescription>
                   </div>
                   <button
@@ -233,17 +214,9 @@ export default function DashboardPage() {
             </Card>
           )}
 
-          {activeTab === 'analytics' && (
-            <AnalyticsTab urls={userUrls} />
-          )}
-
-          {activeTab === 'bulk' && (
-            <BulkShortenTab onSuccess={fetchUrls} />
-          )}
-
-          {activeTab === 'bio' && (
-            <LinkInBioTab />
-          )}
+          {activeTab === 'analytics' && <AnalyticsTab urls={userUrls} />}
+          {activeTab === 'bulk' && <BulkShortenTab onSuccess={fetchUrls} />}
+          {activeTab === 'bio' && <LinkInBioTab />}
         </div>
       </div>
     </div>
