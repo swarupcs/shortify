@@ -2,7 +2,7 @@
 
 import { ApiResponse } from '@/lib/types';
 import { auth } from '@/server/auth';
-import { db, eq } from '@/server/db';
+import { db } from '@/server/db';
 import { urls } from '@/server/db/schema';
 import { revalidatePath } from 'next/cache';
 import { writeAuditLog } from '../audit-log';
@@ -15,10 +15,8 @@ export async function bulkManageFlaggedUrls(
   try {
     const session = await auth();
     if (!session?.user) return { success: false, error: 'Unauthorized' };
-    if (session.user.role !== 'admin')
-      return { success: false, error: 'Unauthorized' };
-    if (urlIds.length === 0)
-      return { success: false, error: 'No URLs selected' };
+    if (session.user.role !== 'admin') return { success: false, error: 'Unauthorized' };
+    if (urlIds.length === 0) return { success: false, error: 'No URLs selected' };
 
     if (action === 'approve') {
       await db

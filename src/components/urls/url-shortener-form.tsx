@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { usePathname, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { shortenUrl } from '@/server/actions/urls/shorten-url';
 import { Card, CardContent } from '../ui/card';
 import {
@@ -29,6 +29,8 @@ import { toast } from 'sonner';
 import { SignupSuggestionDialog } from '../dialogs/signup-suggestion-dialog';
 import { BASEURL } from '@/lib/const';
 import { cn } from '@/lib/utils';
+
+const ADVANCED_STORAGE_KEY = 'shortify_show_advanced';
 
 const urlFormSchema = z.object({
   url: z
@@ -52,10 +54,7 @@ const urlFormSchema = z.object({
     .regex(/^[a-zA-Z0-9_-]+$/, 'Only letters, numbers, hyphens, underscores')
     .optional(),
   expiresAt: z.string().optional(),
-  password: z
-    .string()
-    .max(100, 'Password too long')
-    .optional(),
+  password: z.string().max(100, 'Password too long').optional(),
 });
 
 type UrlFormData = z.infer<typeof urlFormSchema>;
@@ -75,13 +74,36 @@ export function UrlShortenerForm({ onSuccess }: UrlShortenerFormProps) {
   const [showSignupDialog, setShowSignupDialog] = useState(false);
   const [isQrCodeModalOpen, setIsQrCodeModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [flaggedInfo, setFlaggedInfo] = useState<{
     flagged: boolean;
     reason: string | null;
     message: string | undefined;
   } | null>(null);
+
+  // ── Persist showAdvanced in localStorage ──────────────────────────────
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Load from localStorage on mount (client only)
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(ADVANCED_STORAGE_KEY);
+      if (stored !== null) setShowAdvanced(stored === 'true');
+    } catch {
+      // localStorage may be unavailable (SSR, private browsing) — safe to ignore
+    }
+  }, []);
+
+  const toggleAdvanced = () => {
+    setShowAdvanced((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(ADVANCED_STORAGE_KEY, String(next));
+      } catch {}
+      return next;
+    });
+  };
+  // ─────────────────────────────────────────────────────────────────────
 
   const form = useForm<UrlFormData>({
     resolver: zodResolver(urlFormSchema),
@@ -149,7 +171,6 @@ export function UrlShortenerForm({ onSuccess }: UrlShortenerFormProps) {
     }
   };
 
-  // Min date = tomorrow
   const minDate = new Date();
   minDate.setDate(minDate.getDate() + 1);
   const minDateStr = minDate.toISOString().split('T')[0];
@@ -203,10 +224,14 @@ export function UrlShortenerForm({ onSuccess }: UrlShortenerFormProps) {
             {/* ── Advanced toggle ── */}
             <button
               type='button'
-              onClick={() => setShowAdvanced(!showAdvanced)}
+              onClick={toggleAdvanced}
               className='flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mx-auto'
             >
-              {showAdvanced ? <ChevronUp className='size-3' /> : <ChevronDown className='size-3' />}
+              {showAdvanced ? (
+                <ChevronUp className='size-3' />
+              ) : (
+                <ChevronDown className='size-3' />
+              )}
               {showAdvanced ? 'Hide' : 'Show'} advanced options
             </button>
 
@@ -230,7 +255,9 @@ export function UrlShortenerForm({ onSuccess }: UrlShortenerFormProps) {
                           <Input
                             {...field}
                             value={field.value || ''}
-                            onChange={(e) => field.onChange(e.target.value || undefined)}
+                            onChange={(e) =>
+                              field.onChange(e.target.value || undefined)
+                            }
                             placeholder='custom-code (optional)'
                             disabled={isLoading}
                             className='h-8 text-sm'
@@ -346,7 +373,11 @@ export function UrlShortenerForm({ onSuccess }: UrlShortenerFormProps) {
                       )}
                       onClick={copyToClipboard}
                     >
-                      {copied ? <Check className='size-4' /> : <Copy className='size-4' />}
+                      {copied ? (
+                        <Check className='size-4' />
+                      ) : (
+                        <Copy className='size-4' />
+                      )}
                     </Button>
                     <Button
                       type='button'
