@@ -1,23 +1,22 @@
-"use server";
+'use server';
 
-import { BASEURL } from "@/lib/const";
-import { ApiResponse } from "@/lib/types";
-import { auth } from "@/server/auth";
-import { db, eq } from "@/server/db";
-import { urls } from "@/server/db/schema";
-import { revalidatePath } from "next/cache";
-import { z } from "zod";
+import { ApiResponse } from '@/lib/types';
+import { auth } from '@/server/auth';
+import { db, eq } from '@/server/db';
+import { urls } from '@/server/db/schema';
+import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
 
 const updateUrlSchema = z.object({
   id: z.coerce.number(),
   customCode: z
     .string()
-    .max(255, "Custom code must be less than 255 characters")
-    .regex(/^[a-zA-Z0-9_-]+$/, "Custom code must be alphanumeric or hyphen"),
+    .max(255, 'Custom code must be less than 255 characters')
+    .regex(/^[a-zA-Z0-9_-]+$/, 'Custom code must be alphanumeric or hyphen'),
 });
 
 export async function updateUrl(
-  formData: FormData
+  formData: FormData,
 ): Promise<ApiResponse<{ shortUrl: string }>> {
   try {
     const session = await auth();
@@ -26,13 +25,13 @@ export async function updateUrl(
     if (!userId) {
       return {
         success: false,
-        error: "You must be logged in to update a URL",
+        error: 'You must be logged in to update a URL',
       };
     }
 
     const validatedFields = updateUrlSchema.safeParse({
-      id: formData.get("id"),
-      customCode: formData.get("customCode"),
+      id: formData.get('id'),
+      customCode: formData.get('customCode'),
     });
 
     if (!validatedFields.success) {
@@ -41,7 +40,7 @@ export async function updateUrl(
         error:
           validatedFields.error.flatten().fieldErrors.id?.[0] ||
           validatedFields.error.flatten().fieldErrors.customCode?.[0] ||
-          "Invalid URL ID",
+          'Invalid URL ID',
       };
     }
 
@@ -67,7 +66,7 @@ export async function updateUrl(
     if (codeExists) {
       return {
         success: false,
-        error: "Custom code already exists",
+        error: 'Custom code already exists',
       };
     }
 
@@ -79,21 +78,23 @@ export async function updateUrl(
       })
       .where(eq(urls.id, id));
 
-    // const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const baseUrl = BASEURL;
+    // FIX 9 (also in update-url): BASEURL imported from const.ts is undefined
+    // on the server when window is not available and env var is missing.
+    // Use process.env directly with a safe fallback instead.
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const shortUrl = `${baseUrl}/r/${customCode}`;
 
-    revalidatePath("/dashboard");
+    revalidatePath('/dashboard');
 
     return {
       success: true,
       data: { shortUrl },
     };
   } catch (error) {
-    console.error("Failed to update URL", error);
+    console.error('Failed to update URL', error);
     return {
       success: false,
-      error: "An error occurred",
+      error: 'An error occurred',
     };
   }
 }

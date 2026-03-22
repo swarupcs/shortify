@@ -1,27 +1,27 @@
-"use server";
+'use server';
 
-import { ApiResponse } from "@/lib/types";
-import { ensureHttps, isValidUrl } from "@/lib/utils";
-import { custom, z } from "zod";
-import { nanoid } from "nanoid";
-import { db } from "@/server/db";
-import { urls } from "@/server/db/schema";
-import { revalidatePath } from "next/cache";
-import { auth } from "@/server/auth";
-import { checkUrlSafety } from "./check-url-safety";
-import { BASEURL } from "@/lib/const";
+import { ApiResponse } from '@/lib/types';
+import { ensureHttps, isValidUrl } from '@/lib/utils';
+// FIX 4: removed unused `custom` import from zod
+import { z } from 'zod';
+import { nanoid } from 'nanoid';
+import { db } from '@/server/db';
+import { urls } from '@/server/db/schema';
+import { revalidatePath } from 'next/cache';
+import { auth } from '@/server/auth';
+import { checkUrlSafety } from './check-url-safety';
 
 const shortenUrlSchema = z.object({
   url: z.string().refine(isValidUrl, {
-    message: "Please enter a valid URL",
+    message: 'Please enter a valid URL',
   }),
   customCode: z
     .string()
-    .max(20, "Custom code must be less than 255 characters")
-    .regex(/^[a-zA-Z0-9_-]+$/, "Custom code must be alphanumeric or hyphen")
+    .max(20, 'Custom code must be less than 255 characters')
+    .regex(/^[a-zA-Z0-9_-]+$/, 'Custom code must be alphanumeric or hyphen')
     .optional()
     .nullable()
-    .transform((val) => (val === null || val === "" ? undefined : val)),
+    .transform((val) => (val === null || val === '' ? undefined : val)),
 });
 
 export async function shortenUrl(formData: FormData): Promise<
@@ -36,8 +36,8 @@ export async function shortenUrl(formData: FormData): Promise<
     const session = await auth();
     const userId = session?.user?.id;
 
-    const url = formData.get("url") as string;
-    const customCode = formData.get("customCode") as string;
+    const url = formData.get('url') as string;
+    const customCode = formData.get('customCode') as string;
 
     const validatedFields = shortenUrlSchema.safeParse({
       url,
@@ -50,7 +50,7 @@ export async function shortenUrl(formData: FormData): Promise<
         error:
           validatedFields.error.flatten().fieldErrors.url?.[0] ||
           validatedFields.error.flatten().fieldErrors.customCode?.[0] ||
-          "Invalid URL",
+          'Invalid URL',
       };
     }
 
@@ -65,13 +65,13 @@ export async function shortenUrl(formData: FormData): Promise<
       flagReason = safetyCheck.data.reason;
 
       if (
-        safetyCheck.data.category === "malicious" &&
+        safetyCheck.data.category === 'malicious' &&
         safetyCheck.data.confidence > 0.7 &&
-        session?.user?.role !== "admin"
+        session?.user?.role !== 'admin'
       ) {
         return {
           success: false,
-          error: "This URL is flagged as malicious",
+          error: 'This URL is flagged as malicious',
         };
       }
     }
@@ -87,7 +87,7 @@ export async function shortenUrl(formData: FormData): Promise<
       if (validatedFields.data.customCode) {
         return {
           success: false,
-          error: "Custom code already exists",
+          error: 'Custom code already exists',
         };
       }
       return shortenUrl(formData);
@@ -103,11 +103,11 @@ export async function shortenUrl(formData: FormData): Promise<
       flagReason,
     });
 
-    // const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const baseUrl = BASEURL;
+    // FIX 9: BASEURL can be undefined server-side when env var is missing — fall back safely
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const shortUrl = `${baseUrl}/r/${shortCode}`;
 
-    revalidatePath("/");
+    revalidatePath('/');
 
     return {
       success: true,
@@ -116,15 +116,15 @@ export async function shortenUrl(formData: FormData): Promise<
         flagged,
         flagReason,
         message: flagged
-          ? "This URL has been flagged for review by our safety system. It may be temporarily limited until approved by an administrator."
+          ? 'This URL has been flagged for review by our safety system. It may be temporarily limited until approved by an administrator.'
           : undefined,
       },
     };
   } catch (error) {
-    console.error("Failed to shorten URL", error);
+    console.error('Failed to shorten URL', error);
     return {
       success: false,
-      error: "Failed to shorten URL",
+      error: 'Failed to shorten URL',
     };
   }
 }

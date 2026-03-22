@@ -1,9 +1,9 @@
-import { updateUrl } from "@/server/actions/urls/update-url";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
-import { toast } from "sonner";
-import { z } from "zod";
+import { updateUrl } from '@/server/actions/urls/update-url';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { toast } from 'sonner';
+import { z } from 'zod';
 import {
   Dialog,
   DialogContent,
@@ -11,24 +11,24 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "../ui/dialog";
+} from '../ui/dialog';
 import {
   Form,
   FormControl,
   FormField,
   FormItem,
   FormMessage,
-} from "../ui/form";
-import { Input } from "../ui/input";
-import { Button } from "../ui/button";
-import { Loader2 } from "lucide-react";
+} from '../ui/form';
+import { Input } from '../ui/input';
+import { Button } from '../ui/button';
+import { Loader2 } from 'lucide-react';
 
 const editUrlSchema = z.object({
   customCode: z
     .string()
-    .min(3, "Custom code must be at least 3 characters")
-    .max(255, "Custom code must be less than 255 characters")
-    .regex(/^[a-zA-Z0-9_-]+$/, "Custom code must be alphanumeric or hyphen"),
+    .min(3, 'Custom code must be at least 3 characters')
+    .max(255, 'Custom code must be less than 255 characters')
+    .regex(/^[a-zA-Z0-9_-]+$/, 'Custom code must be alphanumeric or hyphen'),
 });
 
 type EditUrlFormData = z.infer<typeof editUrlSchema>;
@@ -49,45 +49,40 @@ export function EditUrlModal({
   onSuccess,
 }: EditUrlModalProps) {
   const [isLoading, setIsLoading] = useState(false);
-
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
 
   const form = useForm<EditUrlFormData>({
     resolver: zodResolver(editUrlSchema),
-    defaultValues: {
-      customCode: currentShortCode,
-    },
+    defaultValues: { customCode: currentShortCode },
   });
 
+  // Fix #10: `form` added to deps to avoid stale reference
   useEffect(() => {
     form.reset({ customCode: currentShortCode });
-  }, [currentShortCode]);
+  }, [currentShortCode, form]);
 
   const onSubmit = async (data: EditUrlFormData) => {
     setIsLoading(true);
-
     try {
       const formData = new FormData();
-      formData.append("id", urlId.toString());
-      formData.append("customCode", data.customCode);
+      formData.append('id', urlId.toString());
+      formData.append('customCode', data.customCode);
 
       const response = await updateUrl(formData);
 
       if (response.success && response.data) {
-        toast.success("URL updated successfully", {
-          description: "The URL has been updated successfully",
-        });
+        toast.success('URL updated successfully');
         onSuccess(data.customCode);
         onOpenChange(false);
       } else {
-        toast.error("Failed to update URL", {
-          description: response.error || "An error occurred",
+        toast.error('Failed to update URL', {
+          description: response.error || 'An error occurred',
         });
       }
     } catch (error) {
-      console.error("Failed to update URL", error);
-      toast.error("Failed to update URL", {
-        description: "An error occurred",
+      console.error('Failed to update URL', error);
+      toast.error('Failed to update URL', {
+        description: 'An error occurred',
       });
     } finally {
       setIsLoading(false);
@@ -96,32 +91,32 @@ export function EditUrlModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className='sm:max-w-md rounded-2xl'>
         <DialogHeader>
           <DialogTitle>Edit Short URL</DialogTitle>
           <DialogDescription>
-            Customize the short code for this URL. The short code must be unique
-            and can only contain letters, numbers, hyphens, and underscores.
+            Customize the short code for this URL. Only letters, numbers,
+            hyphens, and underscores are allowed.
           </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-4'>
             <FormField
               control={form.control}
-              name="customCode"
+              name='customCode'
               render={({ field }) => (
                 <FormItem>
                   <FormControl>
-                    <div className="flex items-center">
-                      <span className="text-sm text-muted-foreground mr-2">
+                    <div className='flex items-center rounded-xl border border-border/60 bg-muted/30 overflow-hidden focus-within:ring-2 focus-within:ring-violet-500/20 focus-within:border-violet-400 transition-all'>
+                      <span className='text-sm text-muted-foreground px-3 py-2 border-r border-border/60 bg-muted/50 whitespace-nowrap shrink-0'>
                         {baseUrl}/r/
                       </span>
                       <Input
-                        placeholder="Custom code"
+                        placeholder='custom-code'
                         {...field}
                         disabled={isLoading}
-                        className="flex-1"
+                        className='border-0 bg-transparent focus-visible:ring-0 rounded-none'
                       />
                     </div>
                   </FormControl>
@@ -130,23 +125,28 @@ export function EditUrlModal({
               )}
             />
 
-            <DialogFooter className="sm:justify-end">
+            <DialogFooter className='sm:justify-end gap-2'>
               <Button
-                type="button"
-                variant={"outline"}
+                type='button'
+                variant='outline'
                 onClick={() => onOpenChange(false)}
                 disabled={isLoading}
+                className='border-border/60'
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={isLoading}>
+              <Button
+                type='submit'
+                disabled={isLoading}
+                className='bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white border-0'
+              >
                 {isLoading ? (
                   <>
-                    <Loader2 className="animate-spin size-4 mr-2" />
-                    Updating...
+                    <Loader2 className='animate-spin size-4 mr-2' />
+                    Updating…
                   </>
                 ) : (
-                  "Save Changes"
+                  'Save Changes'
                 )}
               </Button>
             </DialogFooter>

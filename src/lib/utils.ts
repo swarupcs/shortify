@@ -14,8 +14,10 @@ export function isValidUrl(url: string): boolean {
   }
 }
 
+// FIX 5: original checked `!url.startsWith('https://')` twice — first branch
+// should catch anything that isn't already http/https, second should upgrade http → https
 export function ensureHttps(url: string): string {
-  if (!url.startsWith('https://') && !url.startsWith('https://')) {
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
     return `https://${url}`;
   }
 

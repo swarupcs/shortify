@@ -9,6 +9,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 import Link from 'next/link';
+import { auth } from '@/server/auth';
+import { redirect } from 'next/navigation';
 
 const features = [
   {
@@ -43,7 +45,14 @@ const features = [
   },
 ];
 
-export default function Home() {
+export default async function Home() {
+  const session = await auth();
+
+  // Redirect authenticated users straight to their dashboard
+  if (session?.user) {
+    redirect('/dashboard');
+  }
+
   return (
     <div className='relative overflow-hidden'>
       {/* Background grid pattern */}
