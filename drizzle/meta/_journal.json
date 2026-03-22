@@ -8,6 +8,13 @@
       "when": 1774188920344,
       "tag": "0000_cheerful_shen",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1774193275918,
+      "tag": "0001_yielding_pandemic",
+      "breakpoints": true
     }
   ]
 }
