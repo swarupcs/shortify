@@ -15,6 +15,35 @@ function parseReferrer(referer: string | null): string | null {
   }
 }
 
+/**
+ * Record a click increment + click event row.
+ * Extracted so both the normal redirect path and the
+ * password-protected cookie re-entry path share identical logic.
+ */
+async function recordClick(urlId: number, currentClicks: number, shortCode: string): Promise<void> {
+  const headersList = await headers();
+  const country =
+    headersList.get('x-vercel-ip-country') ||
+    headersList.get('cf-ipcountry') ||
+    null;
+  const referrer = parseReferrer(headersList.get('referer'));
+
+  // Increment click count
+  await db
+    .update(urls)
+    .set({ clicks: currentClicks + 1, updatedAt: new Date() })
+    .where(eq(urls.shortCode, shortCode));
+
+  // Record per-click event (non-blocking — never fails the redirect)
+  db.insert(clickEvents)
+    .values({
+      urlId,
+      country: country ? country.substring(0, 2) : null,
+      referrer: referrer ? referrer.substring(0, 255) : null,
+    })
+    .catch(() => {});
+}
+
 export async function getUrlByShortCode(shortCode: string): Promise<
   ApiResponse<{
     originalUrl: string;
@@ -32,7 +61,7 @@ export async function getUrlByShortCode(shortCode: string): Promise<
 
     if (!url) return { success: false, error: 'URL not found' };
 
-    // ── Check expiry ──────────────────────────────────────────────────
+    // ── Expired ───────────────────────────────────────────────────────
     if (url.expiresAt && url.expiresAt < new Date()) {
       return {
         success: true,
@@ -46,13 +75,39 @@ export async function getUrlByShortCode(shortCode: string): Promise<
       };
     }
 
-    // ── Check password protection ─────────────────────────────────────
+    // ── Password protected ────────────────────────────────────────────
     if (url.passwordHash) {
+      // Check if the caller already has a valid access cookie.
+      // We import cookies() lazily here to avoid the cookies() call
+      // on every non-protected redirect (it's slightly cheaper).
+      const { cookies } = await import('next/headers');
+      const cookieStore = await cookies();
+      const accessCookie = cookieStore.get(`shortlink_access_${shortCode}`);
+
+      if (!accessCookie) {
+        // No cookie — caller must enter the password
+        return {
+          success: true,
+          data: {
+            originalUrl: url.originalUrl,
+            passwordProtected: true,
+            flagged: url.flagged || false,
+            flagReason: url.flagReason || null,
+            expired: false,
+          },
+        };
+      }
+
+      // ── FIX: cookie re-entry now records the click ──────────────────
+      // Previously this fell through to a bare redirect() without
+      // incrementing clicks or recording the click event.
+      await recordClick(url.id, url.clicks, shortCode);
+
       return {
         success: true,
         data: {
           originalUrl: url.originalUrl,
-          passwordProtected: true,
+          passwordProtected: false, // cookie valid — treat as normal redirect
           flagged: url.flagged || false,
           flagReason: url.flagReason || null,
           expired: false,
@@ -60,27 +115,8 @@ export async function getUrlByShortCode(shortCode: string): Promise<
       };
     }
 
-    // ── Increment click count (always — flagged or not) ───────────────
-    await db
-      .update(urls)
-      .set({ clicks: url.clicks + 1, updatedAt: new Date() })
-      .where(eq(urls.shortCode, shortCode));
-
-    // ── Record per-click event (non-blocking) ─────────────────────────
-    const headersList = await headers();
-    const country =
-      headersList.get('x-vercel-ip-country') ||
-      headersList.get('cf-ipcountry') ||
-      null;
-    const referrer = parseReferrer(headersList.get('referer'));
-
-    db.insert(clickEvents)
-      .values({
-        urlId: url.id,
-        country: country ? country.substring(0, 2) : null,
-        referrer: referrer ? referrer.substring(0, 255) : null,
-      })
-      .catch(() => {});
+    // ── Normal redirect ───────────────────────────────────────────────
+    await recordClick(url.id, url.clicks, shortCode);
 
     return {
       success: true,

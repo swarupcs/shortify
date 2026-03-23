@@ -3,6 +3,8 @@
 import { ApiResponse } from '@/lib/types';
 import { auth } from '@/server/auth';
 import { db } from '@/server/db';
+import { urls } from '@/server/db/schema';
+import { desc, eq } from 'drizzle-orm';
 
 export type UserUrl = {
   id: number;
@@ -24,22 +26,27 @@ export async function getUserUrls(
       return { success: false, error: 'Unauthorized' };
     }
 
-    const userUrls = await db.query.urls.findMany({
-      where: (urls, { eq }) => eq(urls.userId, userId),
-      orderBy: (urls, { desc }) => [desc(urls.createdAt)],
-    });
+    const rows = await db
+      .select({
+        id: urls.id,
+        originalUrl: urls.originalUrl,
+        shortCode: urls.shortCode,
+        createdAt: urls.createdAt,
+        clicks: urls.clicks,
+        flagged: urls.flagged,
+        expiresAt: urls.expiresAt,
+        passwordHash: urls.passwordHash,
+      })
+      .from(urls)
+      .where(eq(urls.userId, userId))
+      .orderBy(desc(urls.createdAt));
 
     return {
       success: true,
-      data: userUrls.map((url) => ({
-        id: url.id,
-        originalUrl: url.originalUrl,
-        shortCode: url.shortCode,
-        createdAt: url.createdAt,
-        clicks: url.clicks,
-        flagged: url.flagged,
-        expiresAt: url.expiresAt ?? null,
-        passwordHash: url.passwordHash ?? null,
+      data: rows.map((row) => ({
+        ...row,
+        expiresAt: row.expiresAt ?? null,
+        passwordHash: row.passwordHash ?? null,
       })),
     };
   } catch (error) {

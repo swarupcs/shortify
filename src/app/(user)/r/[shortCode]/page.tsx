@@ -1,11 +1,9 @@
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { getUrlByShortCode } from '@/server/actions/urls/get-url';
 import { AlertTriangle, Clock, ExternalLink, Link2, Lock } from 'lucide-react';
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { cookies } from 'next/headers';
 import { PasswordForm } from '@/components/modals/password-form';
 import { format } from 'date-fns';
 
@@ -23,7 +21,7 @@ export default async function RedirectPage(props: { params: Params }) {
   if (response.success && response.data) {
     const data = response.data;
 
-    // ── Expired URL ───────────────────────────────────────────────────
+    // ── Expired ───────────────────────────────────────────────────────
     if (data.expired) {
       return (
         <div className='flex h-[calc(100vh-64px)] items-center justify-center px-4'>
@@ -56,37 +54,30 @@ export default async function RedirectPage(props: { params: Params }) {
       );
     }
 
-    // ── Password-protected URL ────────────────────────────────────────
+    // ── Password protected — no cookie yet ────────────────────────────
+    // getUrlByShortCode returns passwordProtected: true only when there
+    // is no valid access cookie. If the cookie exists it returns false
+    // and falls through to the normal redirect below (click is recorded).
     if (data.passwordProtected) {
-      // Check if user already has valid access cookie
-      const cookieStore = await cookies();
-      const accessCookie = cookieStore.get(`shortlink_access_${shortCode}`);
-
-      if (!accessCookie) {
-        return (
-          <div className='flex h-[calc(100vh-64px)] items-center justify-center px-4'>
-            <div className='w-full max-w-md mx-auto text-center'>
-              <div className='flex justify-center mb-6'>
-                <div className='size-16 rounded-2xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center'>
-                  <Lock className='size-8 text-violet-600 dark:text-violet-400' />
-                </div>
+      return (
+        <div className='flex h-[calc(100vh-64px)] items-center justify-center px-4'>
+          <div className='w-full max-w-md mx-auto text-center'>
+            <div className='flex justify-center mb-6'>
+              <div className='size-16 rounded-2xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center'>
+                <Lock className='size-8 text-violet-600 dark:text-violet-400' />
               </div>
-              <h1 className='text-2xl font-bold mb-2'>
-                Password Protected Link
-              </h1>
-              <p className='text-muted-foreground mb-6 text-sm leading-relaxed'>
-                This link is protected. Enter the password to continue.
-              </p>
-              <PasswordForm shortCode={shortCode} />
             </div>
+            <h1 className='text-2xl font-bold mb-2'>Password Protected Link</h1>
+            <p className='text-muted-foreground mb-6 text-sm leading-relaxed'>
+              This link is protected. Enter the password to continue.
+            </p>
+            <PasswordForm shortCode={shortCode} />
           </div>
-        );
-      }
-      // Has valid cookie — fall through to redirect below
-      redirect(data.originalUrl);
+        </div>
+      );
     }
 
-    // ── Flagged URL ───────────────────────────────────────────────────
+    // ── Flagged ───────────────────────────────────────────────────────
     if (data.flagged) {
       return (
         <div className='flex h-[calc(100vh-64px)] items-center justify-center px-4'>
@@ -120,11 +111,7 @@ export default async function RedirectPage(props: { params: Params }) {
                 asChild
                 className='bg-amber-500 hover:bg-amber-600 text-white border-0 gap-2'
               >
-                <a
-                  href={data.originalUrl}
-                  target='_blank'
-                  rel='noopener noreferrer'
-                >
+                <a href={data.originalUrl} target='_blank' rel='noopener noreferrer'>
                   Proceed Anyway <ExternalLink className='size-4' />
                 </a>
               </Button>
@@ -134,7 +121,7 @@ export default async function RedirectPage(props: { params: Params }) {
       );
     }
 
-    // ── Normal redirect ───────────────────────────────────────────────
+    // ── Normal redirect (includes password-protected with valid cookie) ─
     redirect(data.originalUrl);
   }
 
@@ -147,12 +134,9 @@ export default async function RedirectPage(props: { params: Params }) {
             <Link2 className='size-8 text-destructive' />
           </div>
         </div>
-        <h1 className='text-2xl font-bold text-destructive mb-2'>
-          URL Not Found
-        </h1>
+        <h1 className='text-2xl font-bold text-destructive mb-2'>URL Not Found</h1>
         <p className='text-muted-foreground mb-6 text-sm leading-relaxed'>
-          The short link you&apos;re trying to access doesn&apos;t exist or has
-          been removed.
+          The short link you&apos;re trying to access doesn&apos;t exist or has been removed.
         </p>
         <Button
           asChild

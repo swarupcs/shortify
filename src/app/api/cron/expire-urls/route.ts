@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/server/db';
-import { urls } from '@/server/db/schema';
+import { urls, counters } from '@/server/db/schema';
 import { lt, and, isNotNull } from 'drizzle-orm';
 import { pruneRateLimits } from '@/lib/rate-limit';
 
@@ -43,7 +43,17 @@ export async function GET(request: NextRequest) {
 
     console.log(`[cron] Deleted ${deleted.length} expired URLs`);
 
-    // ── 2. Prune stale rate limit rows ────────────────────────────────
+    // ── 2. Reset daily AI scan counter ────────────────────────────────
+    await db
+      .insert(counters)
+      .values({ key: 'ai_scans_today', value: 0, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: counters.key,
+        set: { value: 0, updatedAt: new Date() },
+      });
+    console.log('[cron] Reset ai_scans_today counter');
+
+    // ── 3. Prune stale rate limit rows ────────────────────────────────
     const prunedRateLimits = await pruneRateLimits();
     console.log(`[cron] Pruned ${prunedRateLimits} stale rate limit rows`);
 
@@ -51,6 +61,7 @@ export async function GET(request: NextRequest) {
       success: true,
       deletedUrls: deleted.length,
       prunedRateLimits,
+      aiScanCounterReset: true,
       cutoff: sevenDaysAgo.toISOString(),
     });
   } catch (error) {

@@ -97,3 +97,49 @@ Without the cron, expired URLs still work correctly — the expiry check happens
 
 ### Bug fix
 - `login/page.tsx` had a stray `Shortify;` bare statement that TypeScript may allow but causes runtime issues — removed
+
+
+
+# Phase 1 — Fix broken/incomplete things
+
+## Files changed
+
+| Output file | Destination |
+|---|---|
+| `src/server/actions/urls/check-url-safety.ts` | Replace existing |
+| `src/server/actions/urls/get-url.ts` | Replace existing |
+| `src/server/actions/urls/get-user-urls.ts` | Replace existing |
+| `src/app/(user)/r/[shortCode]/page.tsx` | Replace existing |
+| `src/app/api/cron/expire-urls/route.ts` | Replace existing |
+
+## No schema changes required
+All three fixes use existing tables (counters, urls, click_events).
+
+## What changed
+
+### 1. aiScansToday counter (check-url-safety.ts)
+- After every successful Gemini API call, atomically increments
+  the `ai_scans_today` row in the `counters` table via
+  INSERT ... ON CONFLICT DO UPDATE
+- Fire-and-forget — counter failure never blocks URL shortening
+- Health monitor at /admin/health now shows real numbers
+
+### 2. Cron counter reset (expire-urls/route.ts)
+- Daily cron now resets `ai_scans_today` to 0 at midnight
+- Upserts the row so it works even on first ever run
+
+### 3. Click recording on password re-entry (get-url.ts + page.tsx)
+- Previously: when a user already had the access cookie, the redirect
+  page called redirect() directly, skipping click increment and
+  click_events insert entirely
+- Fix: extracted recordClick() helper shared by both paths
+- getUrlByShortCode now records the click when cookie is valid and
+  returns passwordProtected: false, letting the page do a normal redirect
+- Removed the inline redirect() + cookies() check from the page —
+  the server action handles it cleanly
+
+### 4. getUserUrls SQL ordering (get-user-urls.ts)
+- Replaced db.query.urls.findMany with relational API with explicit
+  db.select().from(urls).where(eq(...)).orderBy(desc(urls.createdAt))
+- Ordering now happens in Postgres, not in JS after the fact
+- Only selects the 8 columns the UI actually needs
