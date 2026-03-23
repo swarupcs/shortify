@@ -346,3 +346,71 @@ In `src/server/db/schema.ts`, add to the `clickEvents` table:
   Raw Events — one row per click event (capped at 10k rows)
 - Client-side Blob download — no signed URLs needed
 - escapeCsv() handles commas, quotes, and newlines in values
+
+
+# Phase 5 — Production hardening
+
+## No migration required
+All changes are code-only. No new tables or columns.
+
+## Files
+
+| File | Destination |
+|------|-------------|
+| `src/server/actions/admin/audit-log.ts` | Replace existing |
+| `src/server/actions/urls/shorten-url.ts` | Replace existing |
+| `src/server/actions/urls/delete-url.ts` | Replace existing |
+| `src/server/actions/urls/update-url.ts` | Replace existing |
+| `src/server/actions/urls/toggle-url-password.ts` | Replace existing |
+| `src/server/actions/urls/bulk-delete-urls.ts` | Replace existing |
+| `src/server/actions/bio/bio-actions.ts` | Replace existing |
+| `src/app/robots.txt/route.ts` | New file |
+| `src/app/sitemap.ts` | New file |
+| `src/components/error-boundary.tsx` | New file |
+| `src/components/skeletons/dashboard-skeleton.tsx` | New file |
+| `src/components/skeletons/analytics-skeleton.tsx` | New file |
+| `src/app/(user)/dashboard/layout.tsx` | Replace existing |
+| `src/app/api/v1/shorten/route.ts` | Replace existing |
+| `src/app/(admin)/admin/audit/page.tsx` | Replace existing |
+
+## What changed
+
+### User self-action audit logging
+6 new AuditAction types added to audit-log.ts:
+  USER_URL_CREATED, USER_URL_DELETED, USER_URL_CODE_UPDATED,
+  USER_URL_PASSWORD_TOGGLED, USER_URLS_BULK_DELETED, USER_BIO_SAVED
+Each fires writeAuditLog() fire-and-forget after the main operation.
+Audit page shows new colored badges + metadata for each action type.
+Bio targetType is 'bio' (new) alongside existing 'url'/'user'/'database'.
+
+### robots.txt + sitemap
+- /robots.txt served dynamically, blocks /admin/, /dashboard/, /api/, /r/
+- sitemap.ts includes static pages + all public bio pages from DB
+- Both handle errors gracefully and never break the app
+
+### Error boundaries + loading skeletons
+- ErrorBoundary class component + WithErrorBoundary functional wrapper
+- DashboardSkeleton: header, stats grid, shortener form, tab bar, table
+- AnalyticsSkeleton: summary cards, export bar, chart card, table
+- Dashboard layout now wraps children in WithErrorBoundary + Suspense
+  with DashboardSkeleton as the fallback
+
+### API v1 deprecation headers
+Every v1 response now includes:
+  Deprecation: <date>
+  Sunset: <date>
+  Link: </api/v2/shorten>; rel="successor-version"
+  Warning: 299 - "This API version is deprecated..."
+Update DEPRECATION_DATE and SUNSET_DATE in route.ts when v2 ships.
+
+### One manual step
+To use AnalyticsSkeleton in the analytics tab, wrap it in the
+dashboard page's tab rendering:
+
+  import { AnalyticsSkeleton } from '@/components/skeletons/analytics-skeleton';
+
+  {activeTab === 'analytics' && (
+    <Suspense fallback={<AnalyticsSkeleton />}>
+      <AnalyticsTab urls={userUrls} />
+    </Suspense>
+  )}

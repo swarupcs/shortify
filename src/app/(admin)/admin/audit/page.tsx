@@ -6,32 +6,21 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
+  Pagination, PaginationContent, PaginationItem,
+  PaginationLink, PaginationNext, PaginationPrevious,
 } from '@/components/ui/pagination';
 import {
-  Activity,
-  ArrowLeft,
-  CheckCircle,
-  Trash2,
-  UserCog,
-  Database,
+  Activity, ArrowLeft, CheckCircle, Trash2, UserCog,
+  Database, Link2, KeyRound, Layers, BookUser,
 } from 'lucide-react';
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 
-export const metadata: Metadata = {
-  title: 'Audit Log | Admin | Shortify',
-};
+export const metadata: Metadata = { title: 'Audit Log | Admin | Shortify' };
 
 type Params = { searchParams: Promise<{ page?: string; filter?: string }> };
 
-// Typed metadata shape — extend as needed
 type AuditMetadata = {
   shortCode?: string;
   previousRole?: string;
@@ -40,17 +29,19 @@ type AuditMetadata = {
   bulk?: boolean;
   count?: number;
   flagReason?: string;
+  previousCode?: string;
+  newCode?: string;
+  passwordProtected?: boolean;
+  handle?: string;
+  linkCount?: number;
 };
 
-const ACTION_CONFIG: Record<
-  string,
-  { label: string; icon: React.ReactNode; className: string }
-> = {
+const ACTION_CONFIG: Record<string, { label: string; icon: React.ReactNode; className: string }> = {
+  // ── Admin actions ────────────────────────────────────────────────────
   URL_APPROVED: {
     label: 'URL approved',
     icon: <CheckCircle className='size-3.5' />,
-    className:
-      'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400',
+    className: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400',
   },
   URL_DELETED: {
     label: 'URL deleted',
@@ -60,53 +51,76 @@ const ACTION_CONFIG: Record<
   USER_ROLE_CHANGED: {
     label: 'Role changed',
     icon: <UserCog className='size-3.5' />,
-    className:
-      'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
+    className: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
   },
   DATABASE_SEEDED: {
     label: 'DB seeded',
     icon: <Database className='size-3.5' />,
-    className:
-      'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400',
+    className: 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400',
+  },
+  // ── User self-actions ─────────────────────────────────────────────────
+  USER_URL_CREATED: {
+    label: 'URL created',
+    icon: <Link2 className='size-3.5' />,
+    className: 'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400',
+  },
+  USER_URL_DELETED: {
+    label: 'URL deleted (user)',
+    icon: <Trash2 className='size-3.5' />,
+    className: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400',
+  },
+  USER_URL_CODE_UPDATED: {
+    label: 'Code updated',
+    icon: <Link2 className='size-3.5' />,
+    className: 'bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400',
+  },
+  USER_URL_PASSWORD_TOGGLED: {
+    label: 'Password toggled',
+    icon: <KeyRound className='size-3.5' />,
+    className: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400',
+  },
+  USER_URLS_BULK_DELETED: {
+    label: 'Bulk deleted',
+    icon: <Layers className='size-3.5' />,
+    className: 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400',
+  },
+  USER_BIO_SAVED: {
+    label: 'Bio saved',
+    icon: <BookUser className='size-3.5' />,
+    className: 'bg-fuchsia-100 dark:bg-fuchsia-900/30 text-fuchsia-700 dark:text-fuchsia-400',
   },
 };
 
 function ActionBadge({ action }: { action: string }) {
   const config = ACTION_CONFIG[action] ?? {
     label: action,
-    icon: <Activity className='size-3.5' />,
+    icon:  <Activity className='size-3.5' />,
     className: 'bg-muted text-muted-foreground',
   };
   return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium',
-        config.className,
-      )}
-    >
-      {config.icon}
-      {config.label}
+    <span className={cn('inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium', config.className)}>
+      {config.icon}{config.label}
     </span>
   );
 }
 
 export default async function AuditPage({ searchParams }: Params) {
   const session = await auth();
-  if (!session?.user) redirect('/login');
+  if (!session?.user)                redirect('/login');
   if (session.user.role !== 'admin') redirect('/dashboard');
 
-  const params = await searchParams;
-  const page = params.page ? parseInt(params.page) : 1;
-  const filter = (params.filter ?? 'all') as 'all' | 'url' | 'user';
+  const params    = await searchParams;
+  const page      = params.page ? parseInt(params.page) : 1;
+  const filter    = (params.filter ?? 'all') as 'all' | 'url' | 'user';
 
-  const response = await getAuditLogs({ page, limit: 20, filter });
-  const logs = response.data?.logs ?? [];
-  const total = response.data?.total ?? 0;
+  const response  = await getAuditLogs({ page, limit: 20, filter });
+  const logs      = response.data?.logs  ?? [];
+  const total     = response.data?.total ?? 0;
   const totalPages = Math.ceil(total / 20);
 
-  const filters: { id: string; label: string }[] = [
-    { id: 'all', label: 'All actions' },
-    { id: 'url', label: 'URL actions' },
+  const filters = [
+    { id: 'all',  label: 'All actions'  },
+    { id: 'url',  label: 'URL actions'  },
     { id: 'user', label: 'User actions' },
   ];
 
@@ -119,15 +133,12 @@ export default async function AuditPage({ searchParams }: Params) {
           </div>
           <div>
             <h1 className='text-3xl font-bold tracking-tight'>Audit Log</h1>
-            <p className='text-muted-foreground text-sm mt-0.5'>
-              {total} total actions recorded
-            </p>
+            <p className='text-muted-foreground text-sm mt-0.5'>{total} total actions recorded</p>
           </div>
         </div>
         <Link href='/admin'>
           <Button variant='outline' size='sm' className='gap-2'>
-            <ArrowLeft className='size-4' />
-            Back to Admin
+            <ArrowLeft className='size-4' />Back to Admin
           </Button>
         </Link>
       </div>
@@ -140,11 +151,9 @@ export default async function AuditPage({ searchParams }: Params) {
                 <Button
                   variant={filter === f.id ? 'default' : 'outline'}
                   size='sm'
-                  className={
-                    filter === f.id
-                      ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white border-0'
-                      : 'border-border/60'
-                  }
+                  className={filter === f.id
+                    ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white border-0'
+                    : 'border-border/60'}
                 >
                   {f.label}
                 </Button>
@@ -160,23 +169,16 @@ export default async function AuditPage({ searchParams }: Params) {
                 <Activity className='size-5 text-muted-foreground' />
               </div>
               <p className='font-medium mb-1'>No audit logs yet</p>
-              <p className='text-sm text-muted-foreground'>
-                Admin actions will appear here once they&apos;re performed.
-              </p>
+              <p className='text-sm text-muted-foreground'>Admin and user actions will appear here once performed.</p>
             </div>
           ) : (
             <div className='divide-y divide-border/40'>
               {logs.map((log) => {
-                // Cast once here — metadata comes back as `unknown` from the DB
-                const meta = (log.metadata ?? {}) as AuditMetadata;
+                const meta       = (log.metadata ?? {}) as AuditMetadata;
                 const hasMetadata = Object.keys(meta).length > 0;
 
                 return (
-                  <div
-                    key={log.id}
-                    className='flex items-start gap-4 px-4 py-3.5 hover:bg-muted/30 transition-colors'
-                  >
-                    {/* Actor avatar */}
+                  <div key={log.id} className='flex items-start gap-4 px-4 py-3.5 hover:bg-muted/30 transition-colors'>
                     <Avatar className='size-8 shrink-0 mt-0.5'>
                       <AvatarImage src={log.actorImage ?? undefined} />
                       <AvatarFallback className='text-xs bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400'>
@@ -184,21 +186,22 @@ export default async function AuditPage({ searchParams }: Params) {
                       </AvatarFallback>
                     </Avatar>
 
-                    {/* Content */}
                     <div className='flex-1 min-w-0'>
                       <div className='flex items-center gap-2 flex-wrap'>
                         <span className='text-sm font-medium truncate'>
-                          {log.actorName ?? log.actorEmail ?? 'Unknown admin'}
+                          {log.actorName ?? log.actorEmail ?? 'Unknown'}
                         </span>
                         <ActionBadge action={log.action} />
                       </div>
 
-                      {/* Metadata details */}
                       {hasMetadata && (
                         <div className='mt-1 flex flex-wrap gap-x-3 gap-y-0.5'>
                           {meta.shortCode && (
+                            <span className='text-xs text-muted-foreground font-mono'>/{meta.shortCode}</span>
+                          )}
+                          {meta.previousCode && meta.newCode && (
                             <span className='text-xs text-muted-foreground font-mono'>
-                              /{meta.shortCode}
+                              {meta.previousCode} → {meta.newCode}
                             </span>
                           )}
                           {meta.previousRole && meta.newRole && (
@@ -207,13 +210,20 @@ export default async function AuditPage({ searchParams }: Params) {
                             </span>
                           )}
                           {meta.userEmail && (
-                            <span className='text-xs text-muted-foreground'>
-                              {meta.userEmail}
-                            </span>
+                            <span className='text-xs text-muted-foreground'>{meta.userEmail}</span>
                           )}
                           {meta.bulk && meta.count && (
+                            <span className='text-xs text-muted-foreground'>{meta.count} URLs (bulk)</span>
+                          )}
+                          {meta.count !== undefined && !meta.bulk && (
+                            <span className='text-xs text-muted-foreground'>{meta.count} URLs</span>
+                          )}
+                          {meta.handle && (
+                            <span className='text-xs text-muted-foreground font-mono'>/bio/{meta.handle}</span>
+                          )}
+                          {meta.passwordProtected !== undefined && (
                             <span className='text-xs text-muted-foreground'>
-                              {meta.count} URLs (bulk)
+                              {meta.passwordProtected ? 'Protection enabled' : 'Protection removed'}
                             </span>
                           )}
                           {meta.flagReason && (
@@ -223,22 +233,17 @@ export default async function AuditPage({ searchParams }: Params) {
                           )}
                         </div>
                       )}
+
                       <p className='text-xs text-muted-foreground mt-0.5'>
                         Target:{' '}
                         <span className='font-mono'>
-                          {log.targetType}/
-                          {log.targetId.length > 20
-                            ? log.targetId.substring(0, 20) + '…'
-                            : log.targetId}
+                          {log.targetType}/{log.targetId.length > 20 ? log.targetId.substring(0, 20) + '…' : log.targetId}
                         </span>
                       </p>
                     </div>
 
-                    {/* Time */}
                     <span className='text-xs text-muted-foreground shrink-0 mt-0.5'>
-                      {formatDistanceToNow(new Date(log.createdAt), {
-                        addSuffix: true,
-                      })}
+                      {formatDistanceToNow(new Date(log.createdAt), { addSuffix: true })}
                     </span>
                   </div>
                 );
@@ -247,33 +252,22 @@ export default async function AuditPage({ searchParams }: Params) {
           )}
         </CardContent>
 
-        {/* Pagination */}
         {totalPages > 1 && (
           <div className='border-t border-border/60 px-4 py-3'>
             <Pagination>
               <PaginationContent>
                 <PaginationItem>
-                  <PaginationPrevious
-                    href={`/admin/audit?filter=${filter}&page=${Math.max(1, page - 1)}`}
-                  />
+                  <PaginationPrevious href={`/admin/audit?filter=${filter}&page=${Math.max(1, page - 1)}`} />
                 </PaginationItem>
-                {Array.from(
-                  { length: Math.min(totalPages, 5) },
-                  (_, i) => i + 1,
-                ).map((p) => (
+                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1).map((p) => (
                   <PaginationItem key={p}>
-                    <PaginationLink
-                      href={`/admin/audit?filter=${filter}&page=${p}`}
-                      isActive={page === p}
-                    >
+                    <PaginationLink href={`/admin/audit?filter=${filter}&page=${p}`} isActive={page === p}>
                       {p}
                     </PaginationLink>
                   </PaginationItem>
                 ))}
                 <PaginationItem>
-                  <PaginationNext
-                    href={`/admin/audit?filter=${filter}&page=${Math.min(totalPages, page + 1)}`}
-                  />
+                  <PaginationNext href={`/admin/audit?filter=${filter}&page=${Math.min(totalPages, page + 1)}`} />
                 </PaginationItem>
               </PaginationContent>
             </Pagination>
