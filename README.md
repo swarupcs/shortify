@@ -224,3 +224,66 @@ import { VerificationBanner } from '@/components/auth/verification-banner';
 ### Dashboard
 - VerificationBanner shown to unverified credential users
 - Resend button with one-shot success state
+
+
+# Phase 3 — User-facing UX improvements
+
+## Setup
+
+### 1. Run the migration
+Run `phase3-migration.sql` against your Postgres database.
+
+### 2. Add schema additions
+In `src/server/db/schema.ts`:
+- Add `deletedAt: timestamp('deleted_at')` to the `urls` table after `passwordHash`
+- Add the `bioPageViews` table from `schema-addition.ts` after `bioPages`
+- Update `bioPagesRelations` to include `views: many(bioPageViews)`
+- Add `bioPageViewsRelations` from `schema-addition.ts`
+
+### 3. Update admin get-all-urls
+In `src/server/actions/admin/urls/get-all-urls.ts`, add
+`isNull(urls.deletedAt)` to the WHERE clause so soft-deleted
+URLs don't appear in the admin panel either.
+
+## Files
+
+| File | Destination |
+|------|-------------|
+| `phase3-migration.sql` | Run against Postgres |
+| `src/server/db/schema-addition.ts` | Merge into schema.ts |
+| `src/server/actions/urls/bulk-delete-urls.ts` | New file |
+| `src/server/actions/urls/toggle-url-password.ts` | New file |
+| `src/server/actions/urls/get-user-urls.ts` | Replace existing |
+| `src/server/actions/bio/record-bio-view.ts` | New file |
+| `src/server/actions/bio/get-bio-analytics.ts` | New file |
+| `src/components/urls/user-urls-table.tsx` | Replace existing |
+| `src/components/dashboard/link-in-bio-tab.tsx` | Replace existing |
+| `src/app/bio/[handle]/page.tsx` | Replace existing |
+
+## What changed
+
+### Expiry date badge
+- New ExpiryBadge component in user-urls-table
+- Shows "Expires MMM d, yyyy" in blue for active links
+- Shows "Expired" in red for past-due links
+- Appears as its own column on desktop, inline on mobile
+
+### Password toggle on existing links
+- Lock/LockOpen icon button in actions column per row
+- Opens PasswordToggleModal — set new password or remove existing
+- toggleUrlPassword server action verifies ownership before updating
+- Local state updated optimistically on success
+
+### Bulk delete (soft)
+- Checkbox column added to table header and every row
+- Header checkbox supports indeterminate state
+- Bulk action bar slides up when any rows are selected
+- bulkDeleteUrls sets deletedAt = NOW() — rows hidden from user immediately
+- get-user-urls now filters WHERE deleted_at IS NULL
+
+### Bio page view counter
+- recordBioView called fire-and-forget on public bio page load
+- Records bioPageId + country + viewedAt in bio_page_views table
+- getBioAnalytics returns totalViews, viewsLast30Days, dailyViews[]
+- Analytics card shown at top of Link in Bio tab once page is saved
+- Bar chart (recharts) shows daily views for last 30 days

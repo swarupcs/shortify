@@ -1,35 +1,29 @@
-// ── Add these two tables to src/server/db/schema.ts ──────────────────────
-// Place them after the `apiKeys` table definition.
-// Also add the relations at the bottom alongside the other relations.
+// ── Phase 3 schema additions for src/server/db/schema.ts ─────────────────
 
-import { pgTable, varchar, timestamp, serial, text } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+// 1. Add `deletedAt` to the urls table definition:
+//
+//   deletedAt: timestamp('deleted_at'),
+//
+// Place it after the existing `passwordHash` column.
 
-// ── Email verification tokens ──────────────────────────────────────────────
-export const emailVerificationTokens = pgTable('email_verification_tokens', {
-  id:        serial('id').primaryKey(),
-  userId:    varchar('user_id', { length: 255 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
-  token:     varchar('token', { length: 255 }).notNull().unique(),
-  expiresAt: timestamp('expires_at').notNull(),
-  usedAt:    timestamp('used_at'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
+// 2. Add this new table after `bioPages`:
+
+export const bioPageViews = pgTable('bio_page_views', {
+  id:         serial('id').primaryKey(),
+  bioPageId:  integer('bio_page_id').notNull().references(() => bioPages.id, { onDelete: 'cascade' }),
+  viewedAt:   timestamp('viewed_at').notNull().defaultNow(),
+  country:    varchar('country', { length: 2 }),
 });
 
-// ── Password reset tokens ──────────────────────────────────────────────────
-export const passwordResetTokens = pgTable('password_reset_tokens', {
-  id:        serial('id').primaryKey(),
-  userId:    varchar('user_id', { length: 255 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
-  token:     varchar('token', { length: 255 }).notNull().unique(),
-  expiresAt: timestamp('expires_at').notNull(),
-  usedAt:    timestamp('used_at'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-});
+// 3. Add this relation to the bioPagesRelations block (replace the existing one):
+//
+// export const bioPagesRelations = relations(bioPages, ({ one, many }) => ({
+//   user:  one(users, { fields: [bioPages.userId], references: [users.id] }),
+//   views: many(bioPageViews),   // ← add this line
+// }));
 
-// ── Add these to the relations section at the bottom of schema.ts ──────────
-export const emailVerificationTokensRelations = relations(emailVerificationTokens, ({ one }) => ({
-  user: one(users, { fields: [emailVerificationTokens.userId], references: [users.id] }),
-}));
+// 4. Add this new relation alongside the others:
 
-export const passwordResetTokensRelations = relations(passwordResetTokens, ({ one }) => ({
-  user: one(users, { fields: [passwordResetTokens.userId], references: [users.id] }),
+export const bioPageViewsRelations = relations(bioPageViews, ({ one }) => ({
+  bioPage: one(bioPages, { fields: [bioPageViews.bioPageId], references: [bioPages.id] }),
 }));

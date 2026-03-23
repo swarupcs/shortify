@@ -4,7 +4,7 @@ import { ApiResponse } from '@/lib/types';
 import { auth } from '@/server/auth';
 import { db } from '@/server/db';
 import { urls } from '@/server/db/schema';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 
 export type UserUrl = {
   id: number;
@@ -28,24 +28,29 @@ export async function getUserUrls(
 
     const rows = await db
       .select({
-        id: urls.id,
-        originalUrl: urls.originalUrl,
-        shortCode: urls.shortCode,
-        createdAt: urls.createdAt,
-        clicks: urls.clicks,
-        flagged: urls.flagged,
-        expiresAt: urls.expiresAt,
+        id:           urls.id,
+        originalUrl:  urls.originalUrl,
+        shortCode:    urls.shortCode,
+        createdAt:    urls.createdAt,
+        clicks:       urls.clicks,
+        flagged:      urls.flagged,
+        expiresAt:    urls.expiresAt,
         passwordHash: urls.passwordHash,
       })
       .from(urls)
-      .where(eq(urls.userId, userId))
+      .where(
+        and(
+          eq(urls.userId, userId),
+          isNull(urls.deletedAt), // exclude soft-deleted
+        ),
+      )
       .orderBy(desc(urls.createdAt));
 
     return {
       success: true,
       data: rows.map((row) => ({
         ...row,
-        expiresAt: row.expiresAt ?? null,
+        expiresAt:    row.expiresAt    ?? null,
         passwordHash: row.passwordHash ?? null,
       })),
     };
