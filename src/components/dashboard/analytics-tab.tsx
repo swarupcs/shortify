@@ -1,46 +1,23 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import {
-  BarChart3,
-  Globe,
-  Link2,
-  MousePointerClick,
-  TrendingDown,
-  TrendingUp,
-  Zap,
-  ExternalLink,
+  BarChart3, Globe, Link2, MousePointerClick, TrendingDown, TrendingUp,
+  Zap, ExternalLink, Download, Monitor, Smartphone, Tablet, Loader2,
 } from 'lucide-react';
 import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Label,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
+  Bar, BarChart, CartesianGrid, Cell, Label, Line, LineChart,
+  Pie, PieChart, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';
-import {
-  getClickAnalytics,
-  type ClickAnalytics,
-} from '@/server/actions/urls/get-click-analytics';
+import { getClickAnalytics, type ClickAnalytics } from '@/server/actions/urls/get-click-analytics';
+import { exportAnalytics } from '@/server/actions/urls/export-analytics';
 import { useSession } from 'next-auth/react';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
+import { LinkAnalyticsDrawer } from './link-analytics-drawer';
 
 interface Url {
   id: number;
@@ -50,9 +27,7 @@ interface Url {
   clicks: number;
 }
 
-interface AnalyticsTabProps {
-  urls: Url[];
-}
+interface AnalyticsTabProps { urls: Url[]; }
 
 const CHART_COLORS = [
   'hsl(var(--chart-1))',
@@ -62,90 +37,85 @@ const CHART_COLORS = [
   'hsl(var(--chart-5))',
 ];
 
-// Country code → flag emoji
 function countryFlag(code: string): string {
   if (!code || code === 'Unknown') return '🌍';
-  const codePoints = [...code.toUpperCase()].map(
-    (c) => 127397 + c.charCodeAt(0),
-  );
-  return String.fromCodePoint(...codePoints);
+  try {
+    const pts = [...code.toUpperCase()].map((c) => 127397 + c.charCodeAt(0));
+    return String.fromCodePoint(...pts);
+  } catch { return '🌍'; }
+}
+
+function DeviceIcon({ device }: { device: string }) {
+  switch (device.toLowerCase()) {
+    case 'mobile':  return <Smartphone className='size-4' />;
+    case 'tablet':  return <Tablet className='size-4' />;
+    default:        return <Monitor className='size-4' />;
+  }
 }
 
 export function AnalyticsTab({ urls }: AnalyticsTabProps) {
   const { data: session } = useSession();
-  const [clickAnalytics, setClickAnalytics] = useState<ClickAnalytics | null>(null);
+  const [clickAnalytics, setClickAnalytics]     = useState<ClickAnalytics | null>(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+  const [exportingType, setExportingType]       = useState<string | null>(null);
 
-  const totalClicks = urls.reduce((sum, u) => sum + u.clicks, 0);
-  const avgClicks =
-    urls.length > 0 ? Math.round((totalClicks / urls.length) * 10) / 10 : 0;
+  // Per-link drawer
+  const [drawerUrlId,     setDrawerUrlId]     = useState<number | null>(null);
+  const [drawerShortCode, setDrawerShortCode] = useState('');
 
-  const topUrls = useMemo(
-    () => [...urls].sort((a, b) => b.clicks - a.clicks).slice(0, 5),
-    [urls],
-  );
+  const totalClicks = urls.reduce((s, u) => s + u.clicks, 0);
+  const avgClicks   = urls.length > 0 ? Math.round((totalClicks / urls.length) * 10) / 10 : 0;
+  const topUrls     = useMemo(() => [...urls].sort((a, b) => b.clicks - a.clicks).slice(0, 5), [urls]);
+  const barData     = useMemo(() => topUrls.map((u) => ({ url: u.shortCode, clicks: u.clicks, original: u.originalUrl })), [topUrls]);
+  const pieData     = useMemo(() => topUrls.map((u, i) => ({ name: u.shortCode, value: u.clicks, fill: CHART_COLORS[i % CHART_COLORS.length] })), [topUrls]);
 
-  const barData = useMemo(
-    () => topUrls.map((u) => ({ url: u.shortCode, clicks: u.clicks, original: u.originalUrl })),
-    [topUrls],
-  );
-
-  const pieData = useMemo(
-    () =>
-      topUrls.map((u, i) => ({
-        name: u.shortCode,
-        value: u.clicks,
-        fill: CHART_COLORS[i % CHART_COLORS.length],
-      })),
-    [topUrls],
-  );
-
-  // Fetch click analytics
   useEffect(() => {
     if (!session?.user?.id || urls.length === 0) return;
     setLoadingAnalytics(true);
     getClickAnalytics(session.user.id)
-      .then((res) => {
-        if (res.success && res.data) setClickAnalytics(res.data);
-      })
+      .then((res) => { if (res.success && res.data) setClickAnalytics(res.data); })
       .finally(() => setLoadingAnalytics(false));
   }, [session?.user?.id, urls.length]);
 
+  const handleExport = async (type: 'summary' | 'per-link' | 'raw') => {
+    setExportingType(type);
+    try {
+      const result = await exportAnalytics(type);
+      if (!result.success || !result.csv) {
+        toast.error('Export failed', { description: result.error });
+        return;
+      }
+      // Trigger browser download
+      const blob = new Blob([result.csv], { type: 'text/csv;charset=utf-8;' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = result.filename ?? 'export.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Export downloaded');
+    } catch {
+      toast.error('Export failed');
+    } finally {
+      setExportingType(null);
+    }
+  };
+
+  const openDrawer = (urlId: number, shortCode: string) => {
+    setDrawerUrlId(urlId);
+    setDrawerShortCode(shortCode);
+  };
+
   const summaryStats = [
-    {
-      label: 'Total Links',
-      value: urls.length,
-      desc: "Links you've created",
-      icon: <Link2 className='size-4' />,
-      accent: 'text-violet-600 dark:text-violet-400 bg-violet-100 dark:bg-violet-900/30',
-    },
-    {
-      label: 'Total Clicks',
-      value: totalClicks.toLocaleString(),
-      desc: 'Across all your URLs',
-      icon: <MousePointerClick className='size-4' />,
-      accent: 'text-fuchsia-600 dark:text-fuchsia-400 bg-fuchsia-100 dark:bg-fuchsia-900/30',
-    },
-    {
-      label: 'Average Clicks',
-      value: avgClicks,
-      desc: 'Per URL',
-      icon: <BarChart3 className='size-4' />,
-      accent: 'text-violet-600 dark:text-violet-400 bg-violet-100 dark:bg-violet-900/30',
-    },
-    {
-      label: 'Top Performer',
-      value: topUrls[0]?.clicks ?? 0,
-      desc: topUrls[0] ? `/${topUrls[0].shortCode}` : 'No links yet',
-      icon: <Zap className='size-4' />,
-      accent: 'text-fuchsia-600 dark:text-fuchsia-400 bg-fuchsia-100 dark:bg-fuchsia-900/30',
-    },
+    { label: 'Total Links',    value: urls.length,             desc: "Links you've created",  icon: <Link2 className='size-4' />,              accent: 'text-violet-600 dark:text-violet-400 bg-violet-100 dark:bg-violet-900/30' },
+    { label: 'Total Clicks',   value: totalClicks.toLocaleString(), desc: 'Across all your URLs', icon: <MousePointerClick className='size-4' />, accent: 'text-fuchsia-600 dark:text-fuchsia-400 bg-fuchsia-100 dark:bg-fuchsia-900/30' },
+    { label: 'Average Clicks', value: avgClicks,               desc: 'Per URL',               icon: <BarChart3 className='size-4' />,          accent: 'text-violet-600 dark:text-violet-400 bg-violet-100 dark:bg-violet-900/30' },
+    { label: 'Top Performer',  value: topUrls[0]?.clicks ?? 0, desc: topUrls[0] ? `/${topUrls[0].shortCode}` : 'No links yet', icon: <Zap className='size-4' />, accent: 'text-fuchsia-600 dark:text-fuchsia-400 bg-fuchsia-100 dark:bg-fuchsia-900/30' },
   ];
 
-  const trendLabel =
-    avgClicks > 5
-      ? `${((avgClicks / 5) * 100).toFixed(1)}% above baseline`
-      : `${Math.max(0, 5 - avgClicks).toFixed(1)} more avg clicks to hit baseline`;
+  const trendLabel = avgClicks > 5
+    ? `${((avgClicks / 5) * 100).toFixed(1)}% above baseline`
+    : `${Math.max(0, 5 - avgClicks).toFixed(1)} more avg clicks to hit baseline`;
 
   if (urls.length === 0) {
     return (
@@ -154,10 +124,7 @@ export function AnalyticsTab({ urls }: AnalyticsTabProps) {
           <BarChart3 className='size-6 text-violet-600 dark:text-violet-400' />
         </div>
         <p className='font-medium mb-1'>No data yet</p>
-        <p className='text-sm text-muted-foreground max-w-xs'>
-          Create some short URLs and share them — analytics will appear once
-          clicks come in.
-        </p>
+        <p className='text-sm text-muted-foreground max-w-xs'>Create short URLs and share them — analytics will appear once clicks come in.</p>
       </div>
     );
   }
@@ -169,21 +136,37 @@ export function AnalyticsTab({ urls }: AnalyticsTabProps) {
         {summaryStats.map((stat) => (
           <Card key={stat.label} className='border-border/60 rounded-2xl hover:border-border hover:shadow-sm transition-all duration-200'>
             <CardHeader className='pb-2'>
-              <div className={`inline-flex p-2 rounded-xl mb-1 w-fit ${stat.accent}`}>
-                {stat.icon}
-              </div>
-              <CardTitle className='text-sm font-medium text-muted-foreground'>
-                {stat.label}
-              </CardTitle>
+              <div className={`inline-flex p-2 rounded-xl mb-1 w-fit ${stat.accent}`}>{stat.icon}</div>
+              <CardTitle className='text-sm font-medium text-muted-foreground'>{stat.label}</CardTitle>
             </CardHeader>
             <CardContent className='pt-0'>
-              <p className='text-3xl font-bold bg-gradient-to-r from-violet-600 to-fuchsia-600 dark:from-violet-400 dark:to-fuchsia-400 bg-clip-text text-transparent'>
-                {stat.value}
-              </p>
+              <p className='text-3xl font-bold bg-gradient-to-r from-violet-600 to-fuchsia-600 dark:from-violet-400 dark:to-fuchsia-400 bg-clip-text text-transparent'>{stat.value}</p>
               <p className='text-xs text-muted-foreground mt-1'>{stat.desc}</p>
             </CardContent>
           </Card>
         ))}
+      </div>
+
+      {/* Export bar */}
+      <div className='flex items-center justify-between p-4 rounded-2xl border border-border/60 bg-card'>
+        <div>
+          <p className='text-sm font-medium'>Export analytics</p>
+          <p className='text-xs text-muted-foreground mt-0.5'>Download your data as CSV</p>
+        </div>
+        <div className='flex items-center gap-2'>
+          {(['summary', 'per-link', 'raw'] as const).map((type) => (
+            <Button key={type} variant='outline' size='sm'
+              className='gap-1.5 text-xs border-border/60 hover:border-violet-300 dark:hover:border-violet-700 hover:text-violet-600 dark:hover:text-violet-400'
+              disabled={!!exportingType}
+              onClick={() => handleExport(type)}
+            >
+              {exportingType === type
+                ? <Loader2 className='size-3 animate-spin' />
+                : <Download className='size-3' />}
+              {type === 'summary' ? 'Summary' : type === 'per-link' ? 'Per Link' : 'Raw Events'}
+            </Button>
+          ))}
+        </div>
       </div>
 
       {/* Charts */}
@@ -195,9 +178,7 @@ export function AnalyticsTab({ urls }: AnalyticsTabProps) {
             </div>
             <div>
               <CardTitle className='text-base'>Performance</CardTitle>
-              <CardDescription className='text-xs mt-0.5'>
-                Click data across all your links
-              </CardDescription>
+              <CardDescription className='text-xs mt-0.5'>Click data across all your links</CardDescription>
             </div>
           </div>
         </CardHeader>
@@ -205,13 +186,10 @@ export function AnalyticsTab({ urls }: AnalyticsTabProps) {
         <CardContent className='pt-6'>
           <Tabs defaultValue='bar' className='w-full'>
             <TabsList className='mb-6 bg-muted/50 border border-border/60 rounded-xl p-1 flex-wrap h-auto gap-1'>
-              {['bar', 'pie', 'timeline', 'countries'].map((v) => (
-                <TabsTrigger
-                  key={v}
-                  value={v}
-                  className='rounded-lg text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-600 data-[state=active]:to-fuchsia-600 data-[state=active]:text-white data-[state=active]:shadow-sm transition-all capitalize'
-                >
-                  {v === 'bar' ? 'Bar Chart' : v === 'pie' ? 'Pie Chart' : v === 'timeline' ? 'Timeline' : 'Countries'}
+              {['bar', 'pie', 'timeline', 'countries', 'devices'].map((v) => (
+                <TabsTrigger key={v} value={v}
+                  className='rounded-lg text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-600 data-[state=active]:to-fuchsia-600 data-[state=active]:text-white data-[state=active]:shadow-sm transition-all capitalize'>
+                  {v === 'bar' ? 'Bar Chart' : v === 'pie' ? 'Pie Chart' : v === 'timeline' ? 'Timeline' : v === 'countries' ? 'Countries' : 'Devices'}
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -230,7 +208,9 @@ export function AnalyticsTab({ urls }: AnalyticsTabProps) {
                         <CartesianGrid vertical={false} strokeDasharray='3 3' stroke='hsl(var(--border))' />
                         <XAxis dataKey='url' tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} tickMargin={8} />
                         <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} tickMargin={8} />
-                        <Tooltip cursor={{ fill: 'hsl(var(--muted))', radius: 4 }} contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '12px', color: 'hsl(var(--foreground))', fontSize: '12px' }} formatter={(v: number) => [`${v} clicks`, 'Clicks']} labelFormatter={(l) => `/${l}`} />
+                        <Tooltip cursor={{ fill: 'hsl(var(--muted))', radius: 4 }}
+                          contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '12px', color: 'hsl(var(--foreground))', fontSize: '12px' }}
+                          formatter={(v: number) => [`${v} clicks`, 'Clicks']} labelFormatter={(l) => `/${l}`} />
                         <Bar dataKey='clicks' radius={[6, 6, 0, 0]}>
                           {barData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                         </Bar>
@@ -240,7 +220,9 @@ export function AnalyticsTab({ urls }: AnalyticsTabProps) {
                 </CardContent>
                 <CardFooter className='flex-col items-start gap-1 text-sm border-t border-border/60 pt-4'>
                   <div className='flex gap-2 font-medium leading-none text-foreground'>
-                    {avgClicks > 5 ? <><TrendingUp className='size-4 text-emerald-500' />Trending up — {trendLabel}</> : <><TrendingDown className='size-4 text-amber-500' />{trendLabel}</>}
+                    {avgClicks > 5
+                      ? <><TrendingUp className='size-4 text-emerald-500' />Trending up — {trendLabel}</>
+                      : <><TrendingDown className='size-4 text-amber-500' />{trendLabel}</>}
                   </div>
                   <p className='text-xs text-muted-foreground'>Showing top {topUrls.length} URLs</p>
                 </CardFooter>
@@ -252,13 +234,14 @@ export function AnalyticsTab({ urls }: AnalyticsTabProps) {
               <Card className='border-border/60 rounded-2xl'>
                 <CardHeader className='items-center pb-2'>
                   <CardTitle className='text-base'>Click Distribution</CardTitle>
-                  <CardDescription className='text-xs'>How clicks spread across your top {topUrls.length} URLs</CardDescription>
+                  <CardDescription className='text-xs'>How clicks spread across top {topUrls.length} URLs</CardDescription>
                 </CardHeader>
                 <CardContent className='flex flex-col items-center'>
                   <div className='w-full max-w-[360px] h-[320px]'>
                     <ResponsiveContainer width='100%' height='100%'>
                       <PieChart>
-                        <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '12px', color: 'hsl(var(--foreground))', fontSize: '12px' }} formatter={(v: number, n: string) => [`${v} clicks`, `/${n}`]} />
+                        <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '12px', color: 'hsl(var(--foreground))', fontSize: '12px' }}
+                          formatter={(v: number, n: string) => [`${v} clicks`, `/${n}`]} />
                         <Pie data={pieData} dataKey='value' nameKey='name' cx='50%' cy='50%' innerRadius={70} outerRadius={120} strokeWidth={3} stroke='hsl(var(--background))'>
                           {pieData.map((e, i) => <Cell key={i} fill={e.fill} />)}
                           <Label content={({ viewBox }) => {
@@ -316,88 +299,133 @@ export function AnalyticsTab({ urls }: AnalyticsTabProps) {
                     <div className='h-[320px] flex flex-col items-center justify-center text-center gap-2'>
                       <BarChart3 className='size-8 text-muted-foreground/40' />
                       <p className='text-sm text-muted-foreground'>No click events recorded yet.</p>
-                      <p className='text-xs text-muted-foreground'>Share your links to start seeing timeline data.</p>
                     </div>
                   )}
                 </CardContent>
               </Card>
             </TabsContent>
 
-            {/* Countries */}
+            {/* Countries + Referrers */}
             <TabsContent value='countries' className='mt-0'>
               <div className='grid sm:grid-cols-2 gap-4'>
-                {/* Country bar chart */}
                 <Card className='border-border/60 rounded-2xl'>
                   <CardHeader className='pb-2'>
-                    <div className='flex items-center gap-2'>
-                      <Globe className='size-4 text-violet-600 dark:text-violet-400' />
-                      <CardTitle className='text-base'>Top countries</CardTitle>
-                    </div>
+                    <div className='flex items-center gap-2'><Globe className='size-4 text-violet-600 dark:text-violet-400' /><CardTitle className='text-base'>Top countries</CardTitle></div>
                     <CardDescription className='text-xs'>By click count — last 30 days</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    {loadingAnalytics ? (
-                      <div className='py-10 text-center text-sm text-muted-foreground'>Loading…</div>
-                    ) : clickAnalytics && clickAnalytics.byCountry.length > 0 ? (
-                      <div className='space-y-2.5'>
-                        {clickAnalytics.byCountry.map((c, i) => {
-                          const maxClicks = clickAnalytics.byCountry[0].clicks;
-                          const pct = Math.round((c.clicks / maxClicks) * 100);
-                          return (
-                            <div key={c.country} className='flex items-center gap-3'>
-                              <span className='text-base w-6 flex-shrink-0'>{countryFlag(c.country)}</span>
-                              <span className='text-xs text-muted-foreground w-8 flex-shrink-0 font-mono'>{c.country}</span>
-                              <div className='flex-1 h-2 bg-muted rounded-full overflow-hidden'>
-                                <div className='h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500' style={{ width: `${pct}%` }} />
+                    {loadingAnalytics ? <div className='py-10 text-center text-sm text-muted-foreground'>Loading…</div>
+                      : clickAnalytics && clickAnalytics.byCountry.length > 0 ? (
+                        <div className='space-y-2.5'>
+                          {clickAnalytics.byCountry.map((c) => {
+                            const max = clickAnalytics.byCountry[0].clicks;
+                            const pct = Math.round((c.clicks / max) * 100);
+                            return (
+                              <div key={c.country} className='flex items-center gap-3'>
+                                <span className='text-base w-6 shrink-0'>{countryFlag(c.country)}</span>
+                                <span className='text-xs text-muted-foreground w-8 font-mono shrink-0'>{c.country}</span>
+                                <div className='flex-1 h-2 bg-muted rounded-full overflow-hidden'>
+                                  <div className='h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500' style={{ width: `${pct}%` }} />
+                                </div>
+                                <span className='text-xs font-medium tabular-nums w-8 text-right'>{c.clicks}</span>
                               </div>
-                              <span className='text-xs font-medium tabular-nums w-8 text-right'>{c.clicks}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className='py-10 text-center'>
-                        <Globe className='size-8 text-muted-foreground/40 mx-auto mb-2' />
-                        <p className='text-sm text-muted-foreground'>No country data yet.</p>
-                      </div>
-                    )}
+                            );
+                          })}
+                        </div>
+                      ) : <div className='py-10 text-center'><p className='text-sm text-muted-foreground'>No country data yet.</p></div>}
                   </CardContent>
                 </Card>
 
-                {/* Referrer breakdown */}
                 <Card className='border-border/60 rounded-2xl'>
                   <CardHeader className='pb-2'>
-                    <div className='flex items-center gap-2'>
-                      <ExternalLink className='size-4 text-violet-600 dark:text-violet-400' />
-                      <CardTitle className='text-base'>Top referrers</CardTitle>
-                    </div>
+                    <div className='flex items-center gap-2'><ExternalLink className='size-4 text-violet-600 dark:text-violet-400' /><CardTitle className='text-base'>Top referrers</CardTitle></div>
                     <CardDescription className='text-xs'>Where your clicks come from</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    {loadingAnalytics ? (
-                      <div className='py-10 text-center text-sm text-muted-foreground'>Loading…</div>
-                    ) : clickAnalytics && clickAnalytics.byReferrer.length > 0 ? (
-                      <div className='space-y-2.5'>
-                        {clickAnalytics.byReferrer.map((r) => {
-                          const maxClicks = clickAnalytics.byReferrer[0].clicks;
-                          const pct = Math.round((r.clicks / maxClicks) * 100);
-                          return (
-                            <div key={r.referrer} className='flex items-center gap-3'>
-                              <span className='text-xs text-muted-foreground flex-1 truncate font-mono'>{r.referrer}</span>
-                              <div className='w-20 h-2 bg-muted rounded-full overflow-hidden flex-shrink-0'>
-                                <div className='h-full rounded-full bg-gradient-to-r from-fuchsia-500 to-violet-500' style={{ width: `${pct}%` }} />
+                    {loadingAnalytics ? <div className='py-10 text-center text-sm text-muted-foreground'>Loading…</div>
+                      : clickAnalytics && clickAnalytics.byReferrer.length > 0 ? (
+                        <div className='space-y-2.5'>
+                          {clickAnalytics.byReferrer.map((r) => {
+                            const max = clickAnalytics.byReferrer[0].clicks;
+                            const pct = Math.round((r.clicks / max) * 100);
+                            return (
+                              <div key={r.referrer} className='flex items-center gap-3'>
+                                <span className='text-xs text-muted-foreground flex-1 truncate font-mono'>{r.referrer}</span>
+                                <div className='w-20 h-2 bg-muted rounded-full overflow-hidden shrink-0'>
+                                  <div className='h-full rounded-full bg-gradient-to-r from-fuchsia-500 to-violet-500' style={{ width: `${pct}%` }} />
+                                </div>
+                                <span className='text-xs font-medium tabular-nums w-8 text-right'>{r.clicks}</span>
                               </div>
-                              <span className='text-xs font-medium tabular-nums w-8 text-right'>{r.clicks}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className='py-10 text-center'>
-                        <ExternalLink className='size-8 text-muted-foreground/40 mx-auto mb-2' />
-                        <p className='text-sm text-muted-foreground'>No referrer data yet.</p>
-                      </div>
-                    )}
+                            );
+                          })}
+                        </div>
+                      ) : <div className='py-10 text-center'><p className='text-sm text-muted-foreground'>No referrer data yet.</p></div>}
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+            {/* Devices + Browsers */}
+            <TabsContent value='devices' className='mt-0'>
+              <div className='grid sm:grid-cols-2 gap-4'>
+                {/* Devices */}
+                <Card className='border-border/60 rounded-2xl'>
+                  <CardHeader className='pb-2'>
+                    <div className='flex items-center gap-2'><Monitor className='size-4 text-violet-600 dark:text-violet-400' /><CardTitle className='text-base'>Devices</CardTitle></div>
+                    <CardDescription className='text-xs'>Mobile vs desktop vs tablet — last 30 days</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {loadingAnalytics ? <div className='py-10 text-center text-sm text-muted-foreground'>Loading…</div>
+                      : clickAnalytics && clickAnalytics.byDevice.length > 0 ? (
+                        <div className='space-y-3'>
+                          {clickAnalytics.byDevice.map((d, i) => {
+                            const total = clickAnalytics.byDevice.reduce((s, x) => s + x.clicks, 0);
+                            const pct   = Math.round((d.clicks / total) * 100);
+                            return (
+                              <div key={d.device}>
+                                <div className='flex items-center justify-between mb-1'>
+                                  <div className='flex items-center gap-2 text-sm'>
+                                    <DeviceIcon device={d.device} />
+                                    <span className='capitalize font-medium'>{d.device}</span>
+                                  </div>
+                                  <span className='text-sm text-muted-foreground'>{d.clicks} <span className='text-xs'>({pct}%)</span></span>
+                                </div>
+                                <div className='h-2 bg-muted rounded-full overflow-hidden'>
+                                  <div className='h-full rounded-full transition-all' style={{ width: `${pct}%`, background: CHART_COLORS[i % CHART_COLORS.length] }} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : <div className='py-10 text-center'><p className='text-sm text-muted-foreground'>No device data yet.</p><p className='text-xs text-muted-foreground mt-1'>Clicks after this update will include device info.</p></div>}
+                  </CardContent>
+                </Card>
+
+                {/* Browsers */}
+                <Card className='border-border/60 rounded-2xl'>
+                  <CardHeader className='pb-2'>
+                    <div className='flex items-center gap-2'><Globe className='size-4 text-violet-600 dark:text-violet-400' /><CardTitle className='text-base'>Browsers</CardTitle></div>
+                    <CardDescription className='text-xs'>Browser breakdown — last 30 days</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {loadingAnalytics ? <div className='py-10 text-center text-sm text-muted-foreground'>Loading…</div>
+                      : clickAnalytics && clickAnalytics.byBrowser.length > 0 ? (
+                        <div className='space-y-2.5'>
+                          {clickAnalytics.byBrowser.map((b, i) => {
+                            const max = clickAnalytics.byBrowser[0].clicks;
+                            const pct = Math.round((b.clicks / max) * 100);
+                            return (
+                              <div key={b.browser} className='flex items-center gap-3'>
+                                <span className='text-xs text-muted-foreground w-16 shrink-0'>{b.browser}</span>
+                                <div className='flex-1 h-2 bg-muted rounded-full overflow-hidden'>
+                                  <div className='h-full rounded-full' style={{ width: `${pct}%`, background: CHART_COLORS[i % CHART_COLORS.length] }} />
+                                </div>
+                                <span className='text-xs font-medium tabular-nums w-8 text-right'>{b.clicks}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : <div className='py-10 text-center'><p className='text-sm text-muted-foreground'>No browser data yet.</p><p className='text-xs text-muted-foreground mt-1'>Clicks after this update will include browser info.</p></div>}
                   </CardContent>
                 </Card>
               </div>
@@ -407,47 +435,64 @@ export function AnalyticsTab({ urls }: AnalyticsTabProps) {
       </Card>
 
       {/* Per-link performance table */}
-      {urls.length > 0 && (
-        <Card className='border-border/60 rounded-2xl shadow-sm overflow-hidden'>
-          <CardHeader className='border-b border-border/60 bg-muted/20'>
-            <CardTitle className='text-base'>All Links Performance</CardTitle>
-            <CardDescription className='text-xs'>Click breakdown for every link you&apos;ve created</CardDescription>
-          </CardHeader>
-          <CardContent className='p-0'>
-            <div className='overflow-x-auto'>
-              <table className='w-full text-sm'>
-                <thead>
-                  <tr className='border-b border-border/60 bg-muted/10'>
-                    <th className='text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide'>Short Link</th>
-                    <th className='text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide hidden md:table-cell'>Original URL</th>
-                    <th className='text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide w-24'>Clicks</th>
-                    <th className='text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide w-24 hidden sm:table-cell'>Share</th>
-                  </tr>
-                </thead>
-                <tbody className='divide-y divide-border/40'>
-                  {[...urls].sort((a, b) => b.clicks - a.clicks).map((url) => {
-                    const pct = totalClicks > 0 ? Math.round((url.clicks / totalClicks) * 100) : 0;
-                    return (
-                      <tr key={url.id} className='hover:bg-muted/30 transition-colors'>
-                        <td className='px-4 py-3'><span className='font-mono text-violet-600 dark:text-violet-400 font-medium'>/r/{url.shortCode}</span></td>
-                        <td className='px-4 py-3 hidden md:table-cell'><span className='text-muted-foreground truncate block max-w-xs'>{url.originalUrl}</span></td>
-                        <td className='px-4 py-3 text-right'><span className='font-semibold'>{url.clicks.toLocaleString()}</span></td>
-                        <td className='px-4 py-3 hidden sm:table-cell'>
-                          <div className='flex items-center justify-end gap-2'>
-                            <div className='w-16 h-1.5 rounded-full bg-muted overflow-hidden'>
-                              <div className='h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500' style={{ width: `${pct}%` }} />
-                            </div>
-                            <span className='text-xs text-muted-foreground w-8 text-right'>{pct}%</span>
+      <Card className='border-border/60 rounded-2xl shadow-sm overflow-hidden'>
+        <CardHeader className='border-b border-border/60 bg-muted/20'>
+          <CardTitle className='text-base'>All Links Performance</CardTitle>
+          <CardDescription className='text-xs'>Click the chart icon to drill into per-link analytics</CardDescription>
+        </CardHeader>
+        <CardContent className='p-0'>
+          <div className='overflow-x-auto'>
+            <table className='w-full text-sm'>
+              <thead>
+                <tr className='border-b border-border/60 bg-muted/10'>
+                  <th className='text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide'>Short Link</th>
+                  <th className='text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide hidden md:table-cell'>Original URL</th>
+                  <th className='text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide w-24'>Clicks</th>
+                  <th className='text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide w-24 hidden sm:table-cell'>Share</th>
+                  <th className='text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide w-16'>Details</th>
+                </tr>
+              </thead>
+              <tbody className='divide-y divide-border/40'>
+                {[...urls].sort((a, b) => b.clicks - a.clicks).map((url) => {
+                  const pct = totalClicks > 0 ? Math.round((url.clicks / totalClicks) * 100) : 0;
+                  return (
+                    <tr key={url.id} className='hover:bg-muted/30 transition-colors'>
+                      <td className='px-4 py-3'><span className='font-mono text-violet-600 dark:text-violet-400 font-medium'>/r/{url.shortCode}</span></td>
+                      <td className='px-4 py-3 hidden md:table-cell'><span className='text-muted-foreground truncate block max-w-xs'>{url.originalUrl}</span></td>
+                      <td className='px-4 py-3 text-right'><span className='font-semibold'>{url.clicks.toLocaleString()}</span></td>
+                      <td className='px-4 py-3 hidden sm:table-cell'>
+                        <div className='flex items-center justify-end gap-2'>
+                          <div className='w-16 h-1.5 rounded-full bg-muted overflow-hidden'>
+                            <div className='h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500' style={{ width: `${pct}%` }} />
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+                          <span className='text-xs text-muted-foreground w-8 text-right'>{pct}%</span>
+                        </div>
+                      </td>
+                      <td className='px-4 py-3 text-right'>
+                        <button
+                          onClick={() => openDrawer(url.id, url.shortCode)}
+                          className='inline-flex items-center justify-center size-7 rounded-lg text-muted-foreground hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors'
+                          title='View link analytics'
+                        >
+                          <BarChart3 className='size-3.5' />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Per-link analytics drawer */}
+      {drawerUrlId !== null && (
+        <LinkAnalyticsDrawer
+          urlId={drawerUrlId}
+          shortCode={drawerShortCode}
+          onClose={() => { setDrawerUrlId(null); setDrawerShortCode(''); }}
+        />
       )}
     </div>
   );

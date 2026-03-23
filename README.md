@@ -287,3 +287,62 @@ URLs don't appear in the admin panel either.
 - getBioAnalytics returns totalViews, viewsLast30Days, dailyViews[]
 - Analytics card shown at top of Link in Bio tab once page is saved
 - Bar chart (recharts) shows daily views for last 30 days
+
+
+# Phase 4 — Analytics improvements
+
+## Setup
+
+### 1. Run the migration
+Run `phase4-migration.sql` against your Postgres database.
+
+### 2. Add schema additions
+In `src/server/db/schema.ts`, add to the `clickEvents` table:
+  device:  varchar('device',  { length: 20 }),
+  browser: varchar('browser', { length: 50 }),
+
+## Files
+
+| File | Destination |
+|------|-------------|
+| `phase4-migration.sql` | Run against Postgres |
+| `src/server/db/schema-addition.ts` | Merge into schema.ts |
+| `src/lib/user-agent.ts` | New file |
+| `src/server/actions/urls/get-url.ts` | Replace existing |
+| `src/server/actions/urls/verify-url-password.ts` | Replace existing |
+| `src/server/actions/urls/get-click-analytics.ts` | Replace existing |
+| `src/server/actions/urls/get-link-analytics.ts` | New file |
+| `src/server/actions/urls/export-analytics.ts` | New file |
+| `src/components/dashboard/link-analytics-drawer.tsx` | New file |
+| `src/components/dashboard/analytics-tab.tsx` | Replace existing |
+
+## What changed
+
+### Device/browser detection (user-agent.ts + get-url.ts + verify-url-password.ts)
+- parseUserAgent() detects device (mobile/tablet/desktop) and browser
+  (Chrome/Firefox/Safari/Edge/Opera/Samsung/Other) from User-Agent header
+- No dependencies — pure regex matching, order-sensitive for accuracy
+- Both get-url.ts and verify-url-password.ts now write device + browser
+  to click_events on every redirect
+
+### Device/browser charts (analytics-tab.tsx)
+- New "Devices" tab alongside Bar/Pie/Timeline/Countries
+- Device breakdown with percentage bars
+- Browser breakdown with horizontal bars
+- Both pull from the updated getClickAnalytics which now returns
+  byDevice[] and byBrowser[] in addition to existing data
+
+### Per-link drilldown (link-analytics-drawer.tsx + get-link-analytics.ts)
+- BarChart3 icon button per row in the All Links Performance table
+- Opens a right-side drawer with: total clicks, 30-day timeline,
+  device + browser breakdown, top countries, top referrers
+- Closes on backdrop click or Escape key
+- getLinkAnalytics verifies ownership before fetching
+
+### CSV export (export-analytics.ts + analytics-tab.tsx)
+- Export bar at top of analytics tab with three buttons:
+  Summary — one row per link (shortCode, URL, total clicks, etc.)
+  Per Link — shortCode, URL, total clicks, clicks last 30 days
+  Raw Events — one row per click event (capped at 10k rows)
+- Client-side Blob download — no signed URLs needed
+- escapeCsv() handles commas, quotes, and newlines in values

@@ -3,17 +3,21 @@
 import { auth } from '@/server/auth';
 import { db } from '@/server/db';
 import { clickEvents, urls } from '@/server/db/schema';
-import { eq, sql, and, gte, desc } from 'drizzle-orm';
+import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { subDays } from 'date-fns';
 
-export type CountryClickData = { country: string; clicks: number };
-export type TimeSeriesData = { date: string; clicks: number };
-export type ReferrerData = { referrer: string; clicks: number };
+export type CountryClickData  = { country:  string; clicks: number };
+export type TimeSeriesData    = { date:     string; clicks: number };
+export type ReferrerData      = { referrer: string; clicks: number };
+export type DeviceData        = { device:   string; clicks: number };
+export type BrowserData       = { browser:  string; clicks: number };
 
 export type ClickAnalytics = {
-  byCountry: CountryClickData[];
+  byCountry:  CountryClickData[];
   timeSeries: TimeSeriesData[];
   byReferrer: ReferrerData[];
+  byDevice:   DeviceData[];
+  byBrowser:  BrowserData[];
 };
 
 export async function getClickAnalytics(
@@ -25,7 +29,6 @@ export async function getClickAnalytics(
       return { success: false, error: 'Unauthorized' };
     }
 
-    // Get all urlIds belonging to this user
     const userUrls = await db.query.urls.findMany({
       where: (urls, { eq }) => eq(urls.userId, userId),
       columns: { id: true },
@@ -34,79 +37,73 @@ export async function getClickAnalytics(
     if (userUrls.length === 0) {
       return {
         success: true,
-        data: { byCountry: [], timeSeries: [], byReferrer: [] },
+        data: { byCountry: [], timeSeries: [], byReferrer: [], byDevice: [], byBrowser: [] },
       };
     }
 
-    const urlIds = userUrls.map((u) => u.id);
+    const urlIds        = userUrls.map((u) => u.id);
     const thirtyDaysAgo = subDays(new Date(), 30);
 
-    // ── Country breakdown (top 10) ─────────────────────────────────────
-    const countryRows = await db
-      .select({
-        country: clickEvents.country,
-        clicks: sql<number>`count(*)::int`,
-      })
-      .from(clickEvents)
-      .where(
-        and(
-          sql`${clickEvents.urlId} = ANY(ARRAY[${sql.join(urlIds.map(id => sql`${id}`), sql`, `)}])`,
-          gte(clickEvents.clickedAt, thirtyDaysAgo),
-        ),
-      )
-      .groupBy(clickEvents.country)
-      .orderBy(desc(sql`count(*)`))
-      .limit(10);
+    const inUrlIds = sql`${clickEvents.urlId} = ANY(ARRAY[${sql.join(urlIds.map((id) => sql`${id}`), sql`, `)}])`;
 
-    const byCountry: CountryClickData[] = countryRows.map((r) => ({
-      country: r.country || 'Unknown',
-      clicks: r.clicks,
-    }));
+    const [countryRows, timeRows, referrerRows, deviceRows, browserRows] = await Promise.all([
+      // Countries (top 10)
+      db
+        .select({ country: clickEvents.country, clicks: sql<number>`count(*)::int` })
+        .from(clickEvents)
+        .where(and(inUrlIds, gte(clickEvents.clickedAt, thirtyDaysAgo)))
+        .groupBy(clickEvents.country)
+        .orderBy(desc(sql`count(*)`))
+        .limit(10),
 
-    // ── Time series (last 30 days, grouped by day) ─────────────────────
-    const timeRows = await db
-      .select({
-        date: sql<string>`date_trunc('day', ${clickEvents.clickedAt})::date::text`,
-        clicks: sql<number>`count(*)::int`,
-      })
-      .from(clickEvents)
-      .where(
-        and(
-          sql`${clickEvents.urlId} = ANY(ARRAY[${sql.join(urlIds.map(id => sql`${id}`), sql`, `)}])`,
-          gte(clickEvents.clickedAt, thirtyDaysAgo),
-        ),
-      )
-      .groupBy(sql`date_trunc('day', ${clickEvents.clickedAt})`)
-      .orderBy(sql`date_trunc('day', ${clickEvents.clickedAt})`);
+      // Time series (daily, last 30 days)
+      db
+        .select({
+          date:   sql<string>`date_trunc('day', ${clickEvents.clickedAt})::date::text`,
+          clicks: sql<number>`count(*)::int`,
+        })
+        .from(clickEvents)
+        .where(and(inUrlIds, gte(clickEvents.clickedAt, thirtyDaysAgo)))
+        .groupBy(sql`date_trunc('day', ${clickEvents.clickedAt})`)
+        .orderBy(sql`date_trunc('day', ${clickEvents.clickedAt})`),
 
-    const timeSeries: TimeSeriesData[] = timeRows.map((r) => ({
-      date: r.date,
-      clicks: r.clicks,
-    }));
+      // Referrers (top 5)
+      db
+        .select({ referrer: clickEvents.referrer, clicks: sql<number>`count(*)::int` })
+        .from(clickEvents)
+        .where(and(inUrlIds, gte(clickEvents.clickedAt, thirtyDaysAgo)))
+        .groupBy(clickEvents.referrer)
+        .orderBy(desc(sql`count(*)`))
+        .limit(5),
 
-    // ── Referrer breakdown (top 5) ─────────────────────────────────────
-    const referrerRows = await db
-      .select({
-        referrer: clickEvents.referrer,
-        clicks: sql<number>`count(*)::int`,
-      })
-      .from(clickEvents)
-      .where(
-        and(
-          sql`${clickEvents.urlId} = ANY(ARRAY[${sql.join(urlIds.map(id => sql`${id}`), sql`, `)}])`,
-          gte(clickEvents.clickedAt, thirtyDaysAgo),
-        ),
-      )
-      .groupBy(clickEvents.referrer)
-      .orderBy(desc(sql`count(*)`))
-      .limit(5);
+      // Devices
+      db
+        .select({ device: clickEvents.device, clicks: sql<number>`count(*)::int` })
+        .from(clickEvents)
+        .where(and(inUrlIds, gte(clickEvents.clickedAt, thirtyDaysAgo)))
+        .groupBy(clickEvents.device)
+        .orderBy(desc(sql`count(*)`)),
 
-    const byReferrer: ReferrerData[] = referrerRows.map((r) => ({
-      referrer: r.referrer || 'Direct',
-      clicks: r.clicks,
-    }));
+      // Browsers (top 6)
+      db
+        .select({ browser: clickEvents.browser, clicks: sql<number>`count(*)::int` })
+        .from(clickEvents)
+        .where(and(inUrlIds, gte(clickEvents.clickedAt, thirtyDaysAgo)))
+        .groupBy(clickEvents.browser)
+        .orderBy(desc(sql`count(*)`))
+        .limit(6),
+    ]);
 
-    return { success: true, data: { byCountry, timeSeries, byReferrer } };
+    return {
+      success: true,
+      data: {
+        byCountry:  countryRows.map((r) => ({ country:  r.country  || 'Unknown', clicks: r.clicks })),
+        timeSeries: timeRows.map((r)    => ({ date:     r.date,                  clicks: r.clicks })),
+        byReferrer: referrerRows.map((r) => ({ referrer: r.referrer || 'Direct', clicks: r.clicks })),
+        byDevice:   deviceRows.map((r)  => ({ device:   r.device   || 'Unknown', clicks: r.clicks })),
+        byBrowser:  browserRows.map((r) => ({ browser:  r.browser  || 'Other',   clicks: r.clicks })),
+      },
+    };
   } catch (error) {
     console.error('Error getting click analytics:', error);
     return { success: false, error: 'Failed to load analytics' };
