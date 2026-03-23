@@ -5,12 +5,13 @@ import { ensureHttps, isValidUrl } from '@/lib/utils';
 import { z } from 'zod';
 import { nanoid } from 'nanoid';
 import { db } from '@/server/db';
-import { urls } from '@/server/db/schema';
+import { urls, users } from '@/server/db/schema';
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/server/auth';
 import { checkUrlSafety } from './check-url-safety';
 import { rateLimit } from '@/lib/rate-limit';
 import { headers } from 'next/headers';
+import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 
 const shortenUrlSchema = z.object({
@@ -54,16 +55,14 @@ export async function shortenUrl(
     const session = await auth();
     const userId = session?.user?.id;
 
-    // ── Rate limiting ──────────────────────────────────────────────────────
+    // ── Rate limiting ──────────────────────────────────────────────────
     const headersList = await headers();
-    const ip = (
+    const ip =
       headersList.get('x-forwarded-for')?.split(',')[0]?.trim() ??
       headersList.get('x-real-ip') ??
-      'unknown'
-    );
+      'unknown';
 
     if (userId) {
-      // Authenticated users: 50 shortens/hour per user ID
       const result = await rateLimit(`shorten:user:${userId}`, 50);
       if (!result.allowed) {
         return {
@@ -71,8 +70,25 @@ export async function shortenUrl(
           error: `Too many requests. Try again in ${Math.ceil(result.retryAfterSeconds / 60)} minute(s).`,
         };
       }
+
+      // ── Block unverified credential users ────────────────────────────
+      // OAuth users are always considered verified (emailVerified is set
+      // on their first sign-in in auth.config.ts).
+      const dbUser = await db.query.users.findFirst({
+        where: eq(users.id, userId),
+        columns: { emailVerified: true, password: true },
+      });
+
+      // Only enforce verification for credential (password) accounts
+      const isCredentialsUser = !!dbUser?.password;
+      if (isCredentialsUser && !dbUser?.emailVerified) {
+        return {
+          success: false,
+          error: 'Please verify your email address before shortening URLs. Check your inbox for a verification link.',
+        };
+      }
     } else {
-      // Anonymous users: 10 shortens/hour per IP
+      // Anonymous: 10/hour per IP
       const result = await rateLimit(`shorten:ip:${ip}`, 10);
       if (!result.allowed) {
         return {
@@ -81,7 +97,6 @@ export async function shortenUrl(
         };
       }
     }
-    // ── End rate limiting ──────────────────────────────────────────────────
 
     const url = formData.get('url') as string;
     const customCode = formData.get('customCode') as string;
@@ -98,8 +113,7 @@ export async function shortenUrl(
     if (!validatedFields.success) {
       return {
         success: false,
-        error:
-          validatedFields.error.flatten().fieldErrors.url?.[0] || 'Invalid URL',
+        error: validatedFields.error.flatten().fieldErrors.url?.[0] || 'Invalid URL',
       };
     }
 

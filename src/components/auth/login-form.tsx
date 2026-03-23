@@ -1,4 +1,5 @@
 'use client';
+
 import { signIn } from 'next-auth/react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -8,10 +9,15 @@ import { z } from 'zod';
 import { Button } from '../ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../ui/form';
 import { Input } from '../ui/input';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Mail } from 'lucide-react';
 import { toast } from 'sonner';
+import { sendVerification } from '@/server/actions/auth/send-verification';
+import Link from 'next/link';
 
-const loginSchema = z.object({ email: z.string().email('Please enter a valid email'), password: z.string().min(6, 'Password must be at least 6 characters') });
+const loginSchema = z.object({
+  email:    z.string().email('Please enter a valid email'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+});
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 function GithubIcon({ className }: { className?: string }) {
@@ -25,37 +31,74 @@ export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
-  const [oauthLoading, setOauthLoading] = useState<'github'|'google'|null>(null);
-  const [error, setError] = useState<string|null>(null);
+  const [oauthLoading, setOauthLoading] = useState<'github' | 'google' | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [resendingVerification, setResendingVerification] = useState(false);
+  const [verificationSent, setVerificationSent] = useState(false);
+  // Show unverified banner if user was redirected here after trying to shorten
+  const [showUnverifiedBanner, setShowUnverifiedBanner] = useState(false);
 
   useEffect(() => {
     if (searchParams.get('registered') === 'true') {
-      toast.success('Account created!', { description: 'Welcome! Please sign in to continue.' });
+      toast.success('Account created!', { description: 'Please check your email to verify your account.' });
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete('registered');
       router.replace(newUrl.toString());
     }
   }, [searchParams, router]);
 
-  const form = useForm<LoginFormValues>({ resolver: zodResolver(loginSchema), defaultValues: { email: '', password: '' } });
+  const form = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { email: '', password: '' },
+  });
 
   async function onSubmit(data: LoginFormValues) {
-    setIsLoading(true); setError(null);
+    setIsLoading(true);
+    setError(null);
+    setShowUnverifiedBanner(false);
     try {
-      const result = await signIn('credentials', { email: data.email, password: data.password, redirect: false });
-      if (result?.error) { setError('Invalid email or password. Please try again.'); return; }
+      const result = await signIn('credentials', {
+        email: data.email,
+        password: data.password,
+        redirect: false,
+      });
+      if (result?.error) {
+        setError('Invalid email or password. Please try again.');
+        return;
+      }
       toast.success('Signed in successfully');
-      router.push('/dashboard'); router.refresh();
-    } catch { setError('Something went wrong. Please try again.'); }
-    finally { setIsLoading(false); }
+      router.push('/dashboard');
+      router.refresh();
+    } catch {
+      setError('Something went wrong. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   }
 
-  const handleOAuth = async (provider: 'github'|'google') => {
+  const handleOAuth = async (provider: 'github' | 'google') => {
     setOauthLoading(provider);
     try { await signIn(provider, { callbackUrl: '/dashboard' }); }
     catch { toast.error('OAuth sign-in failed'); }
     finally { setOauthLoading(null); }
+  };
+
+  const handleResendVerification = async () => {
+    setResendingVerification(true);
+    try {
+      const result = await sendVerification();
+      if (result.success) {
+        setVerificationSent(true);
+        toast.success('Verification email sent!', { description: 'Check your inbox.' });
+      } else {
+        toast.error('Could not resend', { description: result.error });
+      }
+    } catch {
+      toast.error('Something went wrong');
+    } finally {
+      setResendingVerification(false);
+    }
   };
 
   const anyLoading = isLoading || oauthLoading !== null;
@@ -63,32 +106,98 @@ export function LoginForm() {
   return (
     <div className='space-y-5'>
       <div className='grid grid-cols-2 gap-3'>
-        <button type='button' disabled={anyLoading} onClick={() => handleOAuth('github')} className='flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-background hover:bg-muted text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed'>
+        <button type='button' disabled={anyLoading} onClick={() => handleOAuth('github')}
+          className='flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-background hover:bg-muted text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed'>
           {oauthLoading === 'github' ? <Loader2 className='size-4 animate-spin' /> : <GithubIcon className='size-4' />}GitHub
         </button>
-        <button type='button' disabled={anyLoading} onClick={() => handleOAuth('google')} className='flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-background hover:bg-muted text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed'>
+        <button type='button' disabled={anyLoading} onClick={() => handleOAuth('google')}
+          className='flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-background hover:bg-muted text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed'>
           {oauthLoading === 'google' ? <Loader2 className='size-4 animate-spin' /> : <GoogleIcon className='size-4' />}Google
         </button>
       </div>
-      <div className='relative'><div className='absolute inset-0 flex items-center'><div className='w-full border-t border-border' /></div><div className='relative flex justify-center'><span className='bg-background px-3 text-xs text-muted-foreground'>or continue with email</span></div></div>
+
+      <div className='relative'>
+        <div className='absolute inset-0 flex items-center'><div className='w-full border-t border-border' /></div>
+        <div className='relative flex justify-center'><span className='bg-background px-3 text-xs text-muted-foreground'>or continue with email</span></div>
+      </div>
+
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-4'>
           <FormField control={form.control} name='email' render={({ field }) => (
-            <FormItem><FormLabel className='text-sm font-medium'>Email</FormLabel><FormControl><Input {...field} type='email' placeholder='you@example.com' autoComplete='email' disabled={anyLoading} className='h-11 rounded-xl' /></FormControl><FormMessage className='text-xs' /></FormItem>
+            <FormField control={form.control} name='email' render={({ field }) => (
+              <FormItem>
+                <FormLabel className='text-sm font-medium'>Email</FormLabel>
+                <FormControl>
+                  <Input {...field} type='email' placeholder='you@example.com' autoComplete='email' disabled={anyLoading} className='h-11 rounded-xl' />
+                </FormControl>
+                <FormMessage className='text-xs' />
+              </FormItem>
+            )} />
           )} />
+
           <FormField control={form.control} name='password' render={({ field }) => (
             <FormItem>
-              <div className='flex items-center justify-between'><FormLabel className='text-sm font-medium'>Password</FormLabel><button type='button' className='text-xs text-muted-foreground hover:text-violet-600 dark:hover:text-violet-400 transition-colors'>Forgot password?</button></div>
-              <FormControl><div className='relative'><Input {...field} type={showPassword ? 'text' : 'password'} placeholder='••••••••' autoComplete='current-password' disabled={anyLoading} className='h-11 rounded-xl pr-10' /><button type='button' onClick={() => setShowPassword(!showPassword)} className='absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors' tabIndex={-1}>{showPassword ? <EyeOff className='size-4' /> : <Eye className='size-4' />}</button></div></FormControl>
+              <div className='flex items-center justify-between'>
+                <FormLabel className='text-sm font-medium'>Password</FormLabel>
+                {/* ── Forgot password — now a real link ── */}
+                <Link
+                  href='/forgot-password'
+                  className='text-xs text-muted-foreground hover:text-violet-600 dark:hover:text-violet-400 transition-colors'
+                >
+                  Forgot password?
+                </Link>
+              </div>
+              <FormControl>
+                <div className='relative'>
+                  <Input {...field} type={showPassword ? 'text' : 'password'} placeholder='••••••••' autoComplete='current-password' disabled={anyLoading} className='h-11 rounded-xl pr-10' />
+                  <button type='button' onClick={() => setShowPassword(!showPassword)}
+                    className='absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors' tabIndex={-1}>
+                    {showPassword ? <EyeOff className='size-4' /> : <Eye className='size-4' />}
+                  </button>
+                </div>
+              </FormControl>
               <FormMessage className='text-xs' />
             </FormItem>
           )} />
-          {error && <div className='flex items-center gap-2 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm'><svg className='size-4 shrink-0' viewBox='0 0 20 20' fill='currentColor'><path fillRule='evenodd' d='M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z' clipRule='evenodd' /></svg>{error}</div>}
-          <Button type='submit' disabled={anyLoading} className='w-full h-11 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white font-semibold border-0 shadow-none'>
-            {isLoading ? <Loader2 className='size-4 animate-spin mr-2' /> : null}{isLoading ? 'Signing in…' : 'Sign in'}
+
+          {error && (
+            <div className='flex items-center gap-2 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm'>
+              <svg className='size-4 shrink-0' viewBox='0 0 20 20' fill='currentColor'><path fillRule='evenodd' d='M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z' clipRule='evenodd' /></svg>
+              {error}
+            </div>
+          )}
+
+          <Button type='submit' disabled={anyLoading}
+            className='w-full h-11 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white font-semibold border-0 shadow-none'>
+            {isLoading ? <><Loader2 className='size-4 animate-spin mr-2' />Signing in…</> : 'Sign in'}
           </Button>
         </form>
       </Form>
+
+      {/* ── Resend verification nudge (shown after successful sign-in if unverified) ── */}
+      {showUnverifiedBanner && (
+        <div className='p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-sm'>
+          <p className='font-medium text-amber-800 dark:text-amber-300 mb-1'>Email not verified</p>
+          <p className='text-amber-700 dark:text-amber-400 text-xs mb-2'>
+            You need to verify your email before shortening URLs.
+          </p>
+          {!verificationSent ? (
+            <button
+              onClick={handleResendVerification}
+              disabled={resendingVerification}
+              className='flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 hover:underline underline-offset-4'
+            >
+              {resendingVerification
+                ? <><Loader2 className='size-3 animate-spin' />Sending…</>
+                : <><Mail className='size-3' />Resend verification email</>}
+            </button>
+          ) : (
+            <p className='text-xs text-emerald-600 dark:text-emerald-400 font-medium'>
+              ✓ Verification email sent — check your inbox
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

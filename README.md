@@ -143,3 +143,84 @@ All three fixes use existing tables (counters, urls, click_events).
   db.select().from(urls).where(eq(...)).orderBy(desc(urls.createdAt))
 - Ordering now happens in Postgres, not in JS after the fact
 - Only selects the 8 columns the UI actually needs
+
+
+# Phase 2 — Auth Gaps
+
+## Setup
+
+### 1. Install Resend
+```bash
+npm install resend
+```
+
+### 2. Add environment variables
+```env
+RESEND_API_KEY=re_xxxxxxxxxxxx
+RESEND_FROM_EMAIL=Shortify <noreply@yourdomain.com>
+```
+
+### 3. Run the migration
+Run `phase2-migration.sql` against your Postgres database.
+
+### 4. Add schema additions
+Copy the tables from `src/server/db/schema-addition.ts` into your
+`src/server/db/schema.ts` — paste the two table definitions after
+`apiKeys`, and the two relations at the bottom with the other relations.
+
+### 5. Add the verification banner to dashboard
+In `src/app/(user)/dashboard/page.tsx`, import and render
+`<VerificationBanner />` at the top of the returned JSX,
+conditionally when the user has a password but no emailVerified:
+
+```tsx
+import { VerificationBanner } from '@/components/auth/verification-banner';
+
+// Inside the component, after the stats section:
+{session?.user && !session.user.emailVerified && (
+  <VerificationBanner />
+)}
+```
+
+## Files
+
+| File | Destination |
+|------|-------------|
+| `phase2-migration.sql` | Run against Postgres |
+| `src/server/db/schema-addition.ts` | Merge into schema.ts |
+| `src/lib/email.ts` | New file |
+| `src/server/actions/auth/send-verification.ts` | New file |
+| `src/server/actions/auth/verify-email.ts` | New file |
+| `src/server/actions/auth/forgot-password.ts` | New file |
+| `src/server/actions/auth/reset-password.ts` | New file |
+| `src/server/actions/auth/register.ts` | Replace existing |
+| `src/server/actions/urls/shorten-url.ts` | Replace existing |
+| `src/server/auth.config.ts` | Replace existing |
+| `src/app/(auth)/verify-email/page.tsx` | New file |
+| `src/app/(auth)/forgot-password/page.tsx` | New file |
+| `src/app/(auth)/reset-password/page.tsx` | New file |
+| `src/components/auth/login-form.tsx` | Replace existing |
+| `src/components/auth/verification-banner.tsx` | New file |
+
+## What changed
+
+### Email verification
+- register.ts sends a verification email on signup (non-blocking)
+- verify-email action marks emailVerified on the user row + consumes token
+- auth.config.ts marks OAuth users as emailVerified on first sign-in
+- shorten-url.ts blocks credentials users with no emailVerified
+
+### Forgot password
+- Secure random token, 1 hour expiry
+- Always returns success (prevents email enumeration)
+- Rate limited to 3 requests/hour per IP
+- reset-password action validates token, hashes new password, marks token used
+
+### New pages
+- /verify-email?token=... — handles all states (success/expired/invalid)
+- /forgot-password — email input form
+- /reset-password?token=... — password + confirm with strength meter
+
+### Dashboard
+- VerificationBanner shown to unverified credential users
+- Resend button with one-shot success state
