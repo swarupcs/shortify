@@ -8,6 +8,8 @@ import { users, accounts } from './db/schema';
 import bcrypt from 'bcryptjs';
 import { db } from './db';
 import { nanoid } from 'nanoid';
+import { rateLimit } from '@/lib/rate-limit';
+import { headers } from 'next/headers';
 
 declare module 'next-auth' {
   interface User {
@@ -48,8 +50,6 @@ export const authConfig: NextAuthConfig = {
     },
 
     async jwt({ token, user, account, profile }) {
-      // ── Credentials sign-in ──────────────────────────────────────────
-      // `user` comes directly from authorize(), already verified.
       if (account?.provider === 'credentials' && user) {
         token.id      = user.id;
         token.email   = user.email;
@@ -59,13 +59,7 @@ export const authConfig: NextAuthConfig = {
         return token;
       }
 
-      // ── OAuth sign-in (Google / GitHub) ──────────────────────────────
-      // `account` and `profile` are only set on the initial sign-in request,
-      // not on subsequent session reads. So this block only runs once per
-      // actual sign-in, never on page refreshes.
       if (account && profile) {
-        // The email the user just authenticated with at Google/GitHub.
-        // This is the ground truth — it comes directly from the provider.
         const providerEmail = (
           (profile.email as string | undefined) ?? ''
         ).toLowerCase().trim();
@@ -78,9 +72,6 @@ export const authConfig: NextAuthConfig = {
         console.log(`[auth] OAuth sign-in: provider=${account.provider} email=${providerEmail} providerAccountId=${account.providerAccountId}`);
 
         try {
-          // ── 1. Look up the account row by provider + providerAccountId ──
-          // providerAccountId is the unique ID from Google/GitHub for this
-          // specific OAuth account. It never changes for a given Google account.
           const [existingAccount] = await db
             .select({ userId: accounts.userId })
             .from(accounts)
@@ -93,7 +84,6 @@ export const authConfig: NextAuthConfig = {
             .limit(1);
 
           if (existingAccount) {
-            // Found a linked account row — load the user it points to
             const [linkedUser] = await db
               .select()
               .from(users)
@@ -101,12 +91,6 @@ export const authConfig: NextAuthConfig = {
               .limit(1);
 
             if (linkedUser) {
-              // ── CRITICAL CHECK ──────────────────────────────────────
-              // Verify the linked user's email matches what Google just
-              // told us. If they don't match, the accounts row is corrupt
-              // (pointing to the wrong user from a previous broken run).
-              // In that case we delete the bad row and fall through to
-              // create a clean link below.
               if (linkedUser.email.toLowerCase() === providerEmail) {
                 console.log(`[auth] Found clean account link → user ${linkedUser.email}`);
                 token.id      = linkedUser.id;
@@ -117,7 +101,6 @@ export const authConfig: NextAuthConfig = {
                 return token;
               }
 
-              // Corrupt link detected — delete it so we can recreate correctly
               console.warn(
                 `[auth] CORRUPT account link detected! ` +
                 `provider_account_id=${account.providerAccountId} ` +
@@ -136,10 +119,6 @@ export const authConfig: NextAuthConfig = {
             }
           }
 
-          // ── 2. Find or create the user by their provider email ──────
-          // At this point either:
-          //   a) No account row existed (first sign-in with this Google account)
-          //   b) The account row was corrupt and we just deleted it
           let [dbUser] = await db
             .select()
             .from(users)
@@ -147,7 +126,6 @@ export const authConfig: NextAuthConfig = {
             .limit(1);
 
           if (!dbUser) {
-            // First time this email has ever signed in — create the user
             console.log(`[auth] Creating new user for ${providerEmail}`);
             const [created] = await db
               .insert(users)
@@ -165,9 +143,6 @@ export const authConfig: NextAuthConfig = {
             dbUser = created;
           }
 
-          // ── 3. Create the account link ───────────────────────────────
-          // onConflictDoNothing makes this safe to call even if the row
-          // somehow already exists (race condition safety).
           console.log(`[auth] Linking provider ${account.provider} → user ${dbUser.email}`);
           await db
             .insert(accounts)
@@ -199,14 +174,12 @@ export const authConfig: NextAuthConfig = {
         return token;
       }
 
-      // ── Subsequent requests (no account/profile) ─────────────────────
-      // Token is already populated from a previous sign-in. Just return it.
       return token;
     },
 
     async session({ session, token }) {
       session.user.id    = token.id    as string;
-      session.user.role = token.role as 'user' | 'admin' | undefined;
+      session.user.role  = token.role  as 'user' | 'admin' | undefined;
       session.user.email = token.email as string;
       session.user.name  = token.name  as string;
       session.user.image = token.picture as string | null | undefined;
@@ -229,13 +202,31 @@ export const authConfig: NextAuthConfig = {
         email:    { label: 'Email',    type: 'email' },
         password: { label: 'Password', type: 'password' },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         const parsed = z
           .object({ email: z.string().email(), password: z.string().min(6) })
           .safeParse(credentials);
         if (!parsed.success) return null;
 
         const { email, password } = parsed.data;
+
+        // ── Rate limit login attempts by IP ──────────────────────────────
+        // 10 attempts/hour per IP before lockout
+        const ip = (
+          request?.headers?.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+          request?.headers?.get('x-real-ip') ??
+          'unknown'
+        );
+
+        const limitResult = await rateLimit(`login:ip:${ip}`, 10);
+        if (!limitResult.allowed) {
+          // Returning null shows a generic "Sign in failed" error to the user.
+          // NextAuth doesn't support custom error messages from authorize(),
+          // so we log the real reason server-side.
+          console.warn(`[auth] Login rate limit exceeded for IP ${ip}`);
+          return null;
+        }
+
         const [user] = await db
           .select()
           .from(users)

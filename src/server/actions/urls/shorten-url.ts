@@ -9,6 +9,8 @@ import { urls } from '@/server/db/schema';
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/server/auth';
 import { checkUrlSafety } from './check-url-safety';
+import { rateLimit } from '@/lib/rate-limit';
+import { headers } from 'next/headers';
 import bcrypt from 'bcryptjs';
 
 const shortenUrlSchema = z.object({
@@ -20,7 +22,6 @@ const shortenUrlSchema = z.object({
     .optional()
     .nullable()
     .transform((val) => (val === null || val === '' ? undefined : val)),
-  // Phase 2: expiry date (ISO string or null)
   expiresAt: z
     .string()
     .nullable()
@@ -30,7 +31,6 @@ const shortenUrlSchema = z.object({
       const d = new Date(val);
       return isNaN(d.getTime()) ? undefined : d;
     }),
-  // Phase 2: optional password
   password: z
     .string()
     .min(1)
@@ -53,6 +53,35 @@ export async function shortenUrl(
   try {
     const session = await auth();
     const userId = session?.user?.id;
+
+    // ── Rate limiting ──────────────────────────────────────────────────────
+    const headersList = await headers();
+    const ip = (
+      headersList.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+      headersList.get('x-real-ip') ??
+      'unknown'
+    );
+
+    if (userId) {
+      // Authenticated users: 50 shortens/hour per user ID
+      const result = await rateLimit(`shorten:user:${userId}`, 50);
+      if (!result.allowed) {
+        return {
+          success: false,
+          error: `Too many requests. Try again in ${Math.ceil(result.retryAfterSeconds / 60)} minute(s).`,
+        };
+      }
+    } else {
+      // Anonymous users: 10 shortens/hour per IP
+      const result = await rateLimit(`shorten:ip:${ip}`, 10);
+      if (!result.allowed) {
+        return {
+          success: false,
+          error: `Too many requests. Try again in ${Math.ceil(result.retryAfterSeconds / 60)} minute(s).`,
+        };
+      }
+    }
+    // ── End rate limiting ──────────────────────────────────────────────────
 
     const url = formData.get('url') as string;
     const customCode = formData.get('customCode') as string;

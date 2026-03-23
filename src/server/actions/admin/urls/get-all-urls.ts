@@ -1,10 +1,19 @@
-'use server';
+"use server";
 
-import { ApiResponse } from '@/lib/types';
-import { auth } from '@/server/auth';
-import { db } from '@/server/db';
-import { urls, users } from '@/server/db/schema';
-import { and, asc, count, desc, ilike, or, eq, sql } from 'drizzle-orm';
+import { ApiResponse } from "@/lib/types";
+import { auth } from "@/server/auth";
+import { db } from "@/server/db";
+import { urls, users } from "@/server/db/schema";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  ilike,
+  or,
+  eq,
+  sql,
+} from "drizzle-orm";
 
 export type UrlWithUser = {
   id: number;
@@ -19,19 +28,14 @@ export type UrlWithUser = {
   flagReason: string | null;
 };
 
-type SortableColumn =
-  | 'originalUrl'
-  | 'shortCode'
-  | 'createdAt'
-  | 'clicks'
-  | 'userName';
-type FilterOption = 'all' | 'flagged' | 'security' | 'inappropriate' | 'other';
+type SortableColumn = "originalUrl" | "shortCode" | "createdAt" | "clicks" | "userName";
+type FilterOption = "all" | "flagged" | "security" | "inappropriate" | "other";
 
 type GetAllUrlsOptions = {
   page?: number;
   limit?: number;
   sortBy?: SortableColumn;
-  sortOrder?: 'asc' | 'desc';
+  sortOrder?: "asc" | "desc";
   search?: string;
   filter?: FilterOption;
 };
@@ -43,27 +47,27 @@ function buildWhereClause(filter: FilterOption, search: string) {
   const conditions = [];
 
   // ── Flag filter ──────────────────────────────────────────────────────────
-  if (filter === 'flagged') {
+  if (filter === "flagged") {
     conditions.push(eq(urls.flagged, true));
-  } else if (filter === 'security') {
-    conditions.push(eq(urls.flagged, true));
-    conditions.push(
-      or(
-        ilike(urls.flagReason, '%security%'),
-        ilike(urls.flagReason, '%phishing%'),
-        ilike(urls.flagReason, '%malware%'),
-      )!,
-    );
-  } else if (filter === 'inappropriate') {
+  } else if (filter === "security") {
     conditions.push(eq(urls.flagged, true));
     conditions.push(
       or(
-        ilike(urls.flagReason, '%inappropriate%'),
-        ilike(urls.flagReason, '%adult%'),
-        ilike(urls.flagReason, '%offensive%'),
+        ilike(urls.flagReason, "%security%"),
+        ilike(urls.flagReason, "%phishing%"),
+        ilike(urls.flagReason, "%malware%"),
       )!,
     );
-  } else if (filter === 'other') {
+  } else if (filter === "inappropriate") {
+    conditions.push(eq(urls.flagged, true));
+    conditions.push(
+      or(
+        ilike(urls.flagReason, "%inappropriate%"),
+        ilike(urls.flagReason, "%adult%"),
+        ilike(urls.flagReason, "%offensive%"),
+      )!,
+    );
+  } else if (filter === "other") {
     conditions.push(eq(urls.flagged, true));
     // Flagged but NOT matching security or inappropriate keywords
     conditions.push(
@@ -97,20 +101,20 @@ function buildWhereClause(filter: FilterOption, search: string) {
 // ---------------------------------------------------------------------------
 // Helper: map sortBy string to a Drizzle order expression
 // ---------------------------------------------------------------------------
-function buildOrderBy(sortBy: SortableColumn, sortOrder: 'asc' | 'desc') {
-  const dir = sortOrder === 'asc' ? asc : desc;
+function buildOrderBy(sortBy: SortableColumn, sortOrder: "asc" | "desc") {
+  const dir = sortOrder === "asc" ? asc : desc;
 
   switch (sortBy) {
-    case 'originalUrl':
+    case "originalUrl":
       return dir(urls.originalUrl);
-    case 'shortCode':
+    case "shortCode":
       return dir(urls.shortCode);
-    case 'clicks':
+    case "clicks":
       return dir(urls.clicks);
-    case 'userName':
+    case "userName":
       // Sort by name; fall back to email for anonymous rows
       return dir(sql`COALESCE(${users.name}, ${users.email}, '')`);
-    case 'createdAt':
+    case "createdAt":
     default:
       return dir(urls.createdAt);
   }
@@ -124,17 +128,16 @@ export async function getAllUrls(
 ): Promise<ApiResponse<{ urls: UrlWithUser[]; total: number }>> {
   try {
     const session = await auth();
-    if (!session?.user) return { success: false, error: 'Unauthorized' };
-    if (session.user.role !== 'admin')
-      return { success: false, error: 'Unauthorized' };
+    if (!session?.user) return { success: false, error: "Unauthorized" };
+    if (session.user.role !== "admin") return { success: false, error: "Unauthorized" };
 
     const {
       page = 1,
       limit = 10,
-      sortBy = 'createdAt',
-      sortOrder = 'desc',
-      search = '',
-      filter = 'all',
+      sortBy = "createdAt",
+      sortOrder = "desc",
+      search = "",
+      filter = "all",
     } = options;
 
     const offset = (page - 1) * limit;
@@ -180,7 +183,7 @@ export async function getAllUrls(
       },
     };
   } catch (error) {
-    console.error('Error getting all URLs:', error);
-    return { success: false, error: 'Internal Server Error' };
+    console.error("Error getting all URLs:", error);
+    return { success: false, error: "Internal Server Error" };
   }
 }

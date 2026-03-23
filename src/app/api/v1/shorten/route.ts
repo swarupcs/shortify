@@ -3,6 +3,7 @@ import { validateApiKey } from '@/server/actions/api-keys/api-key-actions';
 import { db } from '@/server/db';
 import { urls } from '@/server/db/schema';
 import { checkUrlSafety } from '@/server/actions/urls/check-url-safety';
+import { rateLimit, ipFromHeaders } from '@/lib/rate-limit';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
 
@@ -23,23 +24,6 @@ const requestSchema = z.object({
     }),
 });
 
-/**
- * POST /api/v1/shorten
- *
- * Headers:
- *   Authorization: Bearer sk_live_<key>
- *   Content-Type: application/json
- *
- * Body:
- *   { "url": "https://example.com", "customCode"?: "my-code", "expiresAt"?: "2025-12-31" }
- *
- * Response 200:
- *   { "shortUrl": "https://yourdomain.com/r/abc123", "shortCode": "abc123", "flagged": false }
- *
- * Response 401: { "error": "Unauthorized" }
- * Response 422: { "error": "..." }
- * Response 429: { "error": "Custom code already taken" }
- */
 export async function POST(request: NextRequest) {
   // ── Auth ──────────────────────────────────────────────────────────────
   const authHeader = request.headers.get('authorization');
@@ -57,6 +41,27 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: 'Invalid or revoked API key' },
       { status: 401 },
+    );
+  }
+
+  // ── Rate limiting ─────────────────────────────────────────────────────
+  // 100 requests/hour per API key (keyed on the key's userId so all keys
+  // for the same user share the quota — change to rawKey to isolate per key)
+  const rateLimitResult = await rateLimit(`api:user:${userId}`, 100);
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      {
+        error: 'Rate limit exceeded',
+        retryAfter: rateLimitResult.retryAfterSeconds,
+      },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': String(rateLimitResult.retryAfterSeconds),
+          'X-RateLimit-Limit': '100',
+          'X-RateLimit-Remaining': '0',
+        },
+      },
     );
   }
 
@@ -126,17 +131,22 @@ export async function POST(request: NextRequest) {
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
-  return NextResponse.json({
-    shortUrl: `${baseUrl}/r/${shortCode}`,
-    shortCode,
-    flagged,
-    ...(flagReason ? { flagReason } : {}),
-  });
+  return NextResponse.json(
+    {
+      shortUrl: `${baseUrl}/r/${shortCode}`,
+      shortCode,
+      flagged,
+      ...(flagReason ? { flagReason } : {}),
+    },
+    {
+      headers: {
+        'X-RateLimit-Limit': '100',
+        'X-RateLimit-Remaining': String(rateLimitResult.remaining),
+      },
+    },
+  );
 }
 
-/**
- * GET /api/v1/shorten — returns API docs
- */
 export async function GET() {
   return NextResponse.json({
     name: 'Shortify API v1',
@@ -144,6 +154,7 @@ export async function GET() {
       'POST /api/v1/shorten': {
         description: 'Shorten a URL',
         auth: 'Authorization: Bearer <api_key>',
+        rateLimit: '100 requests/hour per API key',
         body: {
           url: 'string (required) — URL to shorten',
           customCode: 'string (optional) — custom short code',

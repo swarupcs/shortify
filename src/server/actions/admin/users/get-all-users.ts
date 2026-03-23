@@ -1,10 +1,10 @@
-'use server';
+"use server";
 
-import { ApiResponse } from '@/lib/types';
-import { auth } from '@/server/auth';
-import { db } from '@/server/db';
-import { users } from '@/server/db/schema';
-import { and, asc, count, desc, ilike, or, sql } from 'drizzle-orm';
+import { ApiResponse } from "@/lib/types";
+import { auth } from "@/server/auth";
+import { db } from "@/server/db";
+import { users } from "@/server/db/schema";
+import { and, asc, count, desc, ilike, or, sql } from "drizzle-orm";
 
 export type UserWithoutPassword = {
   id: string;
@@ -15,30 +15,30 @@ export type UserWithoutPassword = {
   image: string | null;
 };
 
-type SortableColumn = 'name' | 'email' | 'role' | 'createdAt';
+type SortableColumn = "name" | "email" | "role" | "createdAt";
 
 type GetAllUsersOptions = {
   page?: number;
   limit?: number;
   sortBy?: SortableColumn;
-  sortOrder?: 'asc' | 'desc';
+  sortOrder?: "asc" | "desc";
   search?: string;
 };
 
 // ---------------------------------------------------------------------------
 // Helper: build ORDER BY expression
 // ---------------------------------------------------------------------------
-function buildOrderBy(sortBy: SortableColumn, sortOrder: 'asc' | 'desc') {
-  const dir = sortOrder === 'asc' ? asc : desc;
+function buildOrderBy(sortBy: SortableColumn, sortOrder: "asc" | "desc") {
+  const dir = sortOrder === "asc" ? asc : desc;
 
   switch (sortBy) {
-    case 'name':
+    case "name":
       return dir(users.name);
-    case 'email':
+    case "email":
       return dir(users.email);
-    case 'role':
+    case "role":
       return dir(users.role);
-    case 'createdAt':
+    case "createdAt":
     default:
       return dir(users.createdAt);
   }
@@ -52,23 +52,25 @@ export async function getAllUsers(
 ): Promise<ApiResponse<{ users: UserWithoutPassword[]; total: number }>> {
   try {
     const session = await auth();
-    if (!session?.user) return { success: false, error: 'Not authenticated' };
-    if (session.user.role !== 'admin')
-      return { success: false, error: 'Not authorized' };
+    if (!session?.user) return { success: false, error: "Not authenticated" };
+    if (session.user.role !== "admin") return { success: false, error: "Not authorized" };
 
     const {
       page = 1,
       limit = 10,
-      sortBy = 'createdAt',
-      sortOrder = 'desc',
-      search = '',
+      sortBy = "createdAt",
+      sortOrder = "desc",
+      search = "",
     } = options;
 
     const offset = (page - 1) * limit;
 
     // ── WHERE clause ─────────────────────────────────────────────────────
     const where = search.trim()
-      ? or(ilike(users.email, `%${search}%`), ilike(users.name, `%${search}%`))
+      ? or(
+          ilike(users.email, `%${search}%`),
+          ilike(users.name, `%${search}%`),
+        )
       : undefined;
 
     const orderBy = buildOrderBy(sortBy, sortOrder);
@@ -101,7 +103,7 @@ export async function getAllUsers(
       },
     };
   } catch (error) {
-    console.error('Error getting all users:', error);
-    return { success: false, error: 'Error getting all users' };
+    console.error("Error getting all users:", error);
+    return { success: false, error: "Error getting all users" };
   }
 }
