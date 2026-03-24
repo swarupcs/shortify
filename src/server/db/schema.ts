@@ -91,6 +91,7 @@ export const urls = pgTable('urls', {
   flagReason: text('flag_reason'),
   expiresAt: timestamp('expires_at'),
   passwordHash: text('password_hash'),
+  deletedAt: timestamp('deleted_at'), // ── phase 3: soft delete
 });
 
 export const clickEvents = pgTable('click_events', {
@@ -101,6 +102,8 @@ export const clickEvents = pgTable('click_events', {
   clickedAt: timestamp('clicked_at').notNull().defaultNow(),
   country: varchar('country', { length: 2 }),
   referrer: varchar('referrer', { length: 255 }),
+  device: varchar('device', { length: 20 }), // ── phase 4: device type
+  browser: varchar('browser', { length: 50 }), // ── phase 4: browser name
 });
 
 export const counters = pgTable('counters', {
@@ -109,7 +112,6 @@ export const counters = pgTable('counters', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
-// ← paste here
 export const rateLimits = pgTable(
   'rate_limits',
   {
@@ -138,6 +140,16 @@ export const bioPages = pgTable('bio_pages', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
+export const bioPageViews = pgTable('bio_page_views', {
+  // ── phase 3: bio view tracking
+  id: serial('id').primaryKey(),
+  bioPageId: integer('bio_page_id')
+    .notNull()
+    .references(() => bioPages.id, { onDelete: 'cascade' }),
+  viewedAt: timestamp('viewed_at').notNull().defaultNow(),
+  country: varchar('country', { length: 2 }),
+});
+
 export const auditLogs = pgTable('audit_logs', {
   id: serial('id').primaryKey(),
   actorId: varchar('actor_id', { length: 255 }).references(() => users.id, {
@@ -150,7 +162,6 @@ export const auditLogs = pgTable('audit_logs', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
-// ── Phase 4: API keys ──────────────────────────────────────────────────────
 export const apiKeys = pgTable('api_keys', {
   id: serial('id').primaryKey(),
   userId: varchar('user_id', { length: 255 })
@@ -158,7 +169,7 @@ export const apiKeys = pgTable('api_keys', {
     .references(() => users.id, { onDelete: 'cascade' }),
   name: varchar('name', { length: 100 }).notNull(),
   keyHash: varchar('key_hash', { length: 255 }).notNull().unique(),
-  keyPrefix: varchar('key_prefix', { length: 12 }).notNull(), // e.g. "sk_live_AbCd" shown in UI
+  keyPrefix: varchar('key_prefix', { length: 12 }).notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   lastUsedAt: timestamp('last_used_at'),
   revokedAt: timestamp('revoked_at'),
@@ -187,6 +198,7 @@ export const passwordResetTokens = pgTable('password_reset_tokens', {
 });
 
 // ── Relations ──────────────────────────────────────────────────────────────
+
 export const usersRelations = relations(users, ({ many, one }) => ({
   urls: many(urls),
   accounts: many(accounts),
@@ -205,8 +217,17 @@ export const clickEventsRelations = relations(clickEvents, ({ one }) => ({
   url: one(urls, { fields: [clickEvents.urlId], references: [urls.id] }),
 }));
 
-export const bioPagesRelations = relations(bioPages, ({ one }) => ({
+export const bioPagesRelations = relations(bioPages, ({ one, many }) => ({
   user: one(users, { fields: [bioPages.userId], references: [users.id] }),
+  views: many(bioPageViews), // ── phase 3
+}));
+
+export const bioPageViewsRelations = relations(bioPageViews, ({ one }) => ({
+  // ── phase 3
+  bioPage: one(bioPages, {
+    fields: [bioPageViews.bioPageId],
+    references: [bioPages.id],
+  }),
 }));
 
 export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
