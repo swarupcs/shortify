@@ -10,6 +10,9 @@ import {
   Sparkles,
   Zap,
 } from 'lucide-react';
+import { db } from '@/server/db';
+import { urls } from '@/server/db/schema';
+import { sql } from 'drizzle-orm';
 
 const features = [
   {
@@ -41,15 +44,22 @@ const features = [
   },
 ];
 
-const stats = [
-  { label: 'Links Shortened', value: '1M+' },
-  { label: 'Clicks Tracked', value: '50M+' },
-  { label: 'Uptime', value: '99.9%' },
-];
+
 
 export default async function Home() {
   const session = await auth();
   if (session?.user) redirect('/dashboard');
+
+  const [{ totalUrls }] = await db.select({ totalUrls: sql<number>`count(*)::int` }).from(urls);
+  const [{ totalClicks }] = await db.select({ totalClicks: sql<number>`coalesce(sum(${urls.clicks}), 0)::int` }).from(urls);
+
+  const formatNumber = (n: number) => n >= 1000000 ? `${(n/1000000).toFixed(1)}M+` : n >= 1000 ? `${(n/1000).toFixed(1)}k+` : n.toString();
+
+  const stats = [
+    { label: 'Links Shortened', value: formatNumber(totalUrls) },
+    { label: 'Clicks Tracked', value: formatNumber(totalClicks) },
+    { label: 'Uptime', value: '99.9%' },
+  ];
 
   return (
     <div className='relative overflow-hidden'>

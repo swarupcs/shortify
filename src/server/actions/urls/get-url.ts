@@ -2,6 +2,7 @@
 
 import { ApiResponse } from '@/lib/types';
 import { db, eq } from '@/server/db';
+import { sql } from 'drizzle-orm';
 import { urls, clickEvents } from '@/server/db/schema';
 import { headers } from 'next/headers';
 import { parseUserAgent } from '@/lib/user-agent';
@@ -23,7 +24,7 @@ async function recordClick(urlId: number, currentClicks: number, shortCode: stri
 
   await db
     .update(urls)
-    .set({ clicks: currentClicks + 1, updatedAt: new Date() })
+    .set({ clicks: sql`${urls.clicks} + 1`, updatedAt: new Date() })
     .where(eq(urls.shortCode, shortCode));
 
   db.insert(clickEvents)

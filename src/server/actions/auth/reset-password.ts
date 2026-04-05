@@ -2,7 +2,7 @@
 
 import { db } from '@/server/db';
 import { passwordResetTokens, users } from '@/server/db/schema';
-import { eq, isNull } from 'drizzle-orm';
+import { eq, isNull, and } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 
@@ -62,6 +62,3 @@ export async function resetPassword(
     return { status: 'invalid' };
   }
 }
-
-// Need this import at the top — adding here so the file is self-contained
-import { and } from 'drizzle-orm';

@@ -3,7 +3,7 @@
 import { auth } from '@/server/auth';
 import { db } from '@/server/db';
 import { clickEvents, urls } from '@/server/db/schema';
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, sql, inArray } from 'drizzle-orm';
 import { subDays, format } from 'date-fns';
 
 type ExportType = 'summary' | 'per-link' | 'raw';
@@ -82,7 +82,7 @@ export async function exportAnalytics(type: ExportType): Promise<{
       }
 
       const urlIds   = userUrls.map((u) => u.id);
-      const inUrlIds = sql`${clickEvents.urlId} = ANY(ARRAY[${sql.join(urlIds.map((id) => sql`${id}`), sql`, `)}])`;
+      const inUrlIds = inArray(clickEvents.urlId, urlIds);
 
       // Clicks per URL in last 30 days
       const recentCounts = await db
@@ -109,7 +109,7 @@ export async function exportAnalytics(type: ExportType): Promise<{
     // ── 3. Raw click events ────────────────────────────────────────────
     if (type === 'raw') {
       const userUrls = await db.query.urls.findMany({
-        where: (urls, { eq }) => eq(urls.userId, userId),
+        where: (urls, { eq, and, isNull }) => and(eq(urls.userId, userId), isNull(urls.deletedAt)),
         columns: { id: true, shortCode: true },
       });
 
@@ -123,7 +123,7 @@ export async function exportAnalytics(type: ExportType): Promise<{
 
       const urlIds   = userUrls.map((u) => u.id);
       const shortMap = new Map(userUrls.map((u) => [u.id, u.shortCode]));
-      const inUrlIds = sql`${clickEvents.urlId} = ANY(ARRAY[${sql.join(urlIds.map((id) => sql`${id}`), sql`, `)}])`;
+      const inUrlIds = inArray(clickEvents.urlId, urlIds);
 
       // Last 30 days raw events — cap at 10k rows for safety
       const events = await db

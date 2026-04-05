@@ -108,20 +108,28 @@ export async function shortenUrl(
       passwordHash = await bcrypt.hash(validatedFields.data.password, 10);
     }
 
-    const shortCode = validatedFields.data.customCode || nanoid(6);
-
-    const existingUrl = await db.query.urls.findFirst({
-      where: (urls, { eq }) => eq(urls.shortCode, shortCode),
-    });
-
-    if (existingUrl) {
-      if (validatedFields.data.customCode) return { success: false, error: 'Custom code already exists' };
-      return shortenUrl(formData);
+    let shortCode = validatedFields.data.customCode;
+    if (shortCode) {
+      const existingUrl = await db.query.urls.findFirst({
+        where: (urls, { eq }) => eq(urls.shortCode, shortCode as string),
+      });
+      if (existingUrl) return { success: false, error: 'Custom code already exists' };
+    } else {
+      let attempts = 0;
+      while (attempts < 5) {
+        shortCode = nanoid(6);
+        const existingUrl = await db.query.urls.findFirst({
+          where: (urls, { eq }) => eq(urls.shortCode, shortCode as string),
+        });
+        if (!existingUrl) break;
+        attempts++;
+      }
+      if (attempts === 5) return { success: false, error: 'Failed to generate a unique short code. Please try again.' };
     }
 
     const [inserted] = await db.insert(urls).values({
       originalUrl,
-      shortCode,
+      shortCode: shortCode as string,
       createdAt:    new Date(),
       updatedAt:    new Date(),
       userId:       userId || null,
@@ -133,7 +141,7 @@ export async function shortenUrl(
 
     // ── Audit log (authenticated users only) ────────────────────────────
     if (userId) {
-      writeAuditLog({
+      await writeAuditLog({
         actorId:    userId,
         action:     'USER_URL_CREATED',
         targetType: 'url',

@@ -2,8 +2,8 @@
 
 import { auth } from '@/server/auth';
 import { db } from '@/server/db';
-import { clickEvents, urls } from '@/server/db/schema';
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { clickEvents } from '@/server/db/schema';
+import { and, desc, gte, sql, inArray } from 'drizzle-orm';
 import { subDays } from 'date-fns';
 
 export type CountryClickData  = { country:  string; clicks: number };
@@ -20,14 +20,13 @@ export type ClickAnalytics = {
   byBrowser:  BrowserData[];
 };
 
-export async function getClickAnalytics(
-  userId: string,
-): Promise<{ success: boolean; data?: ClickAnalytics; error?: string }> {
+export async function getClickAnalytics(): Promise<{ success: boolean; data?: ClickAnalytics; error?: string }> {
   try {
     const session = await auth();
-    if (!session?.user || session.user.id !== userId) {
+    if (!session?.user?.id) {
       return { success: false, error: 'Unauthorized' };
     }
+    const userId = session.user.id;
 
     const userUrls = await db.query.urls.findMany({
       where: (urls, { eq }) => eq(urls.userId, userId),
@@ -44,7 +43,7 @@ export async function getClickAnalytics(
     const urlIds        = userUrls.map((u) => u.id);
     const thirtyDaysAgo = subDays(new Date(), 30);
 
-    const inUrlIds = sql`${clickEvents.urlId} = ANY(ARRAY[${sql.join(urlIds.map((id) => sql`${id}`), sql`, `)}])`;
+    const inUrlIds = inArray(clickEvents.urlId, urlIds);
 
     const [countryRows, timeRows, referrerRows, deviceRows, browserRows] = await Promise.all([
       // Countries (top 10)

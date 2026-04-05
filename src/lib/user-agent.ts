@@ -15,7 +15,7 @@ export function parseUserAgent(ua: string | null): {
 } {
   if (!ua) return { device: 'desktop', browser: 'Other' };
 
-  const s = ua.toLowerCase();
+
 
   // ── Device ──────────────────────────────────────────────────────────
   let device: DeviceType = 'desktop';

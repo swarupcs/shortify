@@ -14,7 +14,7 @@ export type UserUrl = {
   clicks: number;
   flagged: boolean;
   expiresAt: Date | null;
-  passwordHash: string | null;
+  passwordProtected: boolean;
 };
 
 export async function getUserUrls(
@@ -49,9 +49,14 @@ export async function getUserUrls(
     return {
       success: true,
       data: rows.map((row) => ({
-        ...row,
+        id:           row.id,
+        originalUrl:  row.originalUrl,
+        shortCode:    row.shortCode,
+        createdAt:    row.createdAt,
+        clicks:       row.clicks,
+        flagged:      row.flagged,
         expiresAt:    row.expiresAt    ?? null,
-        passwordHash: row.passwordHash ?? null,
+        passwordProtected: !!row.passwordHash,
       })),
     };
   } catch (error) {

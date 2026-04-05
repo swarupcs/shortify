@@ -24,7 +24,7 @@ export const users = pgTable('users', {
   password: text('password'),
   role: userRoleEnum('role').default('user').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow().$onUpdate(() => new Date()),
 });
 
 export const accounts = pgTable(
@@ -82,7 +82,7 @@ export const urls = pgTable('urls', {
   originalUrl: varchar('original_url', { length: 2000 }).notNull(),
   shortCode: varchar('short_code', { length: 10 }).notNull().unique(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow().$onUpdate(() => new Date()),
   clicks: integer('clicks').default(0).notNull(),
   userId: varchar('user_id', { length: 255 }).references(() => users.id, {
     onDelete: 'set null',
@@ -109,7 +109,7 @@ export const clickEvents = pgTable('click_events', {
 export const counters = pgTable('counters', {
   key: varchar('key', { length: 255 }).notNull().primaryKey(),
   value: integer('value').default(0).notNull(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow().$onUpdate(() => new Date()),
 });
 
 export const rateLimits = pgTable(
@@ -137,7 +137,7 @@ export const bioPages = pgTable('bio_pages', {
     .notNull()
     .default([]),
   createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow().$onUpdate(() => new Date()),
 });
 
 export const bioPageViews = pgTable('bio_page_views', {

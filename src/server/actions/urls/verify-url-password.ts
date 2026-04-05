@@ -7,18 +7,19 @@ import bcrypt from 'bcryptjs';
 import { headers } from 'next/headers';
 import { cookies } from 'next/headers';
 import { parseUserAgent } from '@/lib/user-agent';
-
-function parseReferrer(referer: string | null): string | null {
-  if (!referer) return null;
-  try { return new URL(referer).hostname || null; }
-  catch { return null; }
-}
+import { sql } from 'drizzle-orm';
+import { rateLimit } from '@/lib/rate-limit';
+import { parseReferrer } from '@/lib/utils';
 
 export async function verifyUrlPassword(
   shortCode: string,
   attempt: string,
 ): Promise<ApiResponse<{ originalUrl: string; flagged: boolean; flagReason: string | null }>> {
   try {
+    const rateLimitResult = await rateLimit(`url-pwd:${shortCode}`, 10, 15 * 60 * 1000);
+    if (!rateLimitResult.allowed) {
+      return { success: false, error: 'Too many attempts. Please try again later.' };
+    }
     const url = await db.query.urls.findFirst({
       where: (urls, { eq }) => eq(urls.shortCode, shortCode),
     });
@@ -41,7 +42,7 @@ export async function verifyUrlPassword(
     // Increment click count
     await db
       .update(urls)
-      .set({ clicks: url.clicks + 1, updatedAt: new Date() })
+      .set({ clicks: sql`${urls.clicks} + 1`, updatedAt: new Date() })
       .where(eq(urls.shortCode, shortCode));
 
     // Record click event with device + browser

@@ -72,7 +72,7 @@ export function AnalyticsTab({ urls }: AnalyticsTabProps) {
   useEffect(() => {
     if (!session?.user?.id || urls.length === 0) return;
     setLoadingAnalytics(true);
-    getClickAnalytics(session.user.id)
+    getClickAnalytics()
       .then((res) => { if (res.success && res.data) setClickAnalytics(res.data); })
       .finally(() => setLoadingAnalytics(false));
   }, [session?.user?.id, urls.length]);

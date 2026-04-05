@@ -15,16 +15,15 @@ export async function deleteUrl(urlId: number): Promise<ApiResponse<null>> {
     if (!url) return { success: false, error: "URL not found" };
     if (url.userId && url.userId !== session.user.id) return { success: false, error: "Unauthorized" };
 
-    await db.delete(urls).where(eq(urls.id, urlId));
+    await db.update(urls).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(urls.id, urlId));
 
-    // Audit log
     writeAuditLog({
       actorId:    session.user.id,
       action:     'USER_URL_DELETED',
       targetType: 'url',
       targetId:   String(urlId),
       metadata:   { shortCode: url.shortCode, originalUrl: url.originalUrl },
-    });
+    }).catch(() => {});
 
     return { success: true, data: null };
   } catch (error) {

@@ -1,4 +1,1 @@
-export const BASEURL =
-  typeof window !== 'undefined'
-    ? window.location.origin
-    : process.env.NEXT_PUBLIC_APP_URL;
+export const BASEURL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';

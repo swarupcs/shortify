@@ -34,7 +34,7 @@ type UrlStatus = 'active' | 'flagged' | 'expired' | 'protected';
 function getUrlStatus(url: UserUrl): UrlStatus {
   if (url.flagged) return 'flagged';
   if (url.expiresAt && isPast(new Date(url.expiresAt))) return 'expired';
-  if (url.passwordHash) return 'protected';
+  if (url.passwordProtected) return 'protected';
   return 'active';
 }
 
@@ -102,7 +102,7 @@ function PasswordToggleModal({
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const isProtected = !!url.passwordHash;
+  const isProtected = !!url.passwordProtected;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -334,7 +334,7 @@ export function UserUrlsTable({ urls, onRefresh }: UserUrlsTableProps) {
   const handlePasswordToggleSuccess = (urlId: number, passwordProtected: boolean) => {
     setLocalUrls((prev) =>
       prev.map((u) => u.id === urlId
-        ? { ...u, passwordHash: passwordProtected ? 'set' : null }
+        ? { ...u, passwordProtected }
         : u,
       ),
     );
@@ -477,13 +477,13 @@ export function UserUrlsTable({ urls, onRefresh }: UserUrlsTableProps) {
                     {/* Password toggle */}
                     <Button
                       variant='ghost' size='icon'
-                      className={cn('size-7', url.passwordHash
+                      className={cn('size-7', url.passwordProtected
                         ? 'text-violet-600 dark:text-violet-400 hover:text-red-500'
                         : 'text-muted-foreground hover:text-violet-600 dark:hover:text-violet-400')}
                       onClick={() => setPasswordToggleUrl(url)}
-                      title={url.passwordHash ? 'Remove password protection' : 'Add password protection'}
+                      title={url.passwordProtected ? 'Remove password protection' : 'Add password protection'}
                     >
-                      {url.passwordHash ? <Lock className='size-3.5' /> : <LockOpen className='size-3.5' />}
+                      {url.passwordProtected ? <Lock className='size-3.5' /> : <LockOpen className='size-3.5' />}
                     </Button>
                     <Button variant='ghost' size='icon' className='size-7 text-muted-foreground hover:text-destructive'
                       onClick={() => handleDelete(url.id)} disabled={isDeleting === url.id}>
@@ -536,9 +536,9 @@ export function UserUrlsTable({ urls, onRefresh }: UserUrlsTableProps) {
                 <Edit className='size-3.5' />
               </Button>
               <Button variant='outline' size='icon'
-                className={cn('size-8', url.passwordHash && 'text-violet-600 dark:text-violet-400 border-violet-200 dark:border-violet-800')}
+                className={cn('size-8', url.passwordProtected && 'text-violet-600 dark:text-violet-400 border-violet-200 dark:border-violet-800')}
                 onClick={() => setPasswordToggleUrl(url)}>
-                {url.passwordHash ? <Lock className='size-3.5' /> : <LockOpen className='size-3.5' />}
+                {url.passwordProtected ? <Lock className='size-3.5' /> : <LockOpen className='size-3.5' />}
               </Button>
               <Button variant='outline' size='icon' className='size-8 text-destructive border-destructive/20 hover:bg-destructive/10'
                 onClick={() => handleDelete(url.id)} disabled={isDeleting === url.id}>
