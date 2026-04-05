@@ -30,14 +30,35 @@ export default function DashboardPage() {
   const fetchUrls = useCallback(async () => {
     if (!session?.user?.id) return;
     const response = await getUserUrls(session.user.id);
+    console.log("response", response)
     if (response.success && response.data) setUserUrls(response.data);
     setLoading(false);
-  }, [session?.user?.id]);
+  }, [session]);
 
   useEffect(() => {
     if (status === 'unauthenticated') redirect('/login');
-    if (status === 'authenticated') fetchUrls();
-  }, [status, fetchUrls]);
+
+    let isMounted = true;
+    
+    const initFetch = async () => {
+      if (!session?.user?.id) return;
+      const response = await getUserUrls(session.user.id);
+      if (!isMounted) return;
+      
+      if (response.success && response.data) {
+        setUserUrls(response.data);
+      }
+      setLoading(false);
+    };
+
+    if (status === 'authenticated') {
+      initFetch();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [status, session]);
 
   const setTab = (tab: TabId) => {
     const params = new URLSearchParams(searchParams.toString());

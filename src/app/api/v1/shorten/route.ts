@@ -3,7 +3,7 @@ import { validateApiKey } from '@/server/actions/api-keys/api-key-actions';
 import { db } from '@/server/db';
 import { urls } from '@/server/db/schema';
 import { checkUrlSafety } from '@/server/actions/urls/check-url-safety';
-import { rateLimit, ipFromHeaders } from '@/lib/rate-limit';
+import { rateLimit } from '@/lib/rate-limit';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
 
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
   if (!authHeader?.startsWith('Bearer ')) {
     return withDeprecationHeaders(
-      NextResponse.json({ error: 'Unauthorized — provide Authorization: Bearer <api_key>' }, { status: 401 }),
+      NextResponse.json({ success: false, error: 'Unauthorized — provide Authorization: Bearer <api_key>' }, { status: 401 }),
     );
   }
 
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
   const userId = await validateApiKey(rawKey);
   if (!userId) {
     return withDeprecationHeaders(
-      NextResponse.json({ error: 'Invalid or revoked API key' }, { status: 401 }),
+      NextResponse.json({ success: false, error: 'Invalid or revoked API key' }, { status: 401 }),
     );
   }
 
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
   if (!rateLimitResult.allowed) {
     return withDeprecationHeaders(
       NextResponse.json(
-        { error: 'Rate limit exceeded', retryAfter: rateLimitResult.retryAfterSeconds },
+        { success: false, error: 'Rate limit exceeded', retryAfter: rateLimitResult.retryAfterSeconds },
         {
           status: 429,
           headers: {
@@ -76,12 +76,12 @@ export async function POST(request: NextRequest) {
   // ── Parse body ────────────────────────────────────────────────────────
   let body: unknown;
   try { body = await request.json(); }
-  catch { return withDeprecationHeaders(NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })); }
+  catch { return withDeprecationHeaders(NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 })); }
 
   const parsed = requestSchema.safeParse(body);
   if (!parsed.success) {
     return withDeprecationHeaders(
-      NextResponse.json({ error: parsed.error.issues[0]?.message || 'Invalid request' }, { status: 422 }),
+      NextResponse.json({ success: false, error: parsed.error.issues[0]?.message || 'Invalid request' }, { status: 422 }),
     );
   }
 
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
     flagReason = safetyCheck.data.reason ?? null;
     if (safetyCheck.data.category === 'malicious' && safetyCheck.data.confidence > 0.7) {
       return withDeprecationHeaders(
-        NextResponse.json({ error: 'URL flagged as malicious and cannot be shortened' }, { status: 422 }),
+        NextResponse.json({ success: false, error: 'URL flagged as malicious and cannot be shortened' }, { status: 422 }),
       );
     }
   }
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
     });
     if (existing) {
       return withDeprecationHeaders(
-        NextResponse.json({ error: 'Custom code is already taken' }, { status: 409 }),
+        NextResponse.json({ success: false, error: 'Custom code is already taken' }, { status: 409 }),
       );
     }
   }
@@ -132,10 +132,13 @@ export async function POST(request: NextRequest) {
   return withDeprecationHeaders(
     NextResponse.json(
       {
-        shortUrl:  `${baseUrl}/r/${shortCode}`,
-        shortCode,
-        flagged,
-        ...(flagReason ? { flagReason } : {}),
+        success: true,
+        data: {
+          shortUrl:  `${baseUrl}/r/${shortCode}`,
+          shortCode,
+          flagged,
+          ...(flagReason ? { flagReason } : {}),
+        }
       },
       {
         headers: {
@@ -150,23 +153,26 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   return withDeprecationHeaders(
     NextResponse.json({
-      name:       'Shortify API v1 (deprecated)',
-      deprecated: true,
-      sunset:     SUNSET_DATE,
-      migrate:    `${APP_URL}/api/v2/shorten`,
-      endpoints: {
-        'POST /api/v1/shorten': {
-          description: 'Shorten a URL',
-          deprecated:  true,
-          auth:        'Authorization: Bearer <api_key>',
-          rateLimit:   '100 requests/hour per API key',
-          body: {
-            url:        'string (required)',
-            customCode: 'string (optional)',
-            expiresAt:  'string (optional) — ISO date e.g. 2025-12-31',
+      success: true,
+      data: {
+        name:       'Shortify API v1 (deprecated)',
+        deprecated: true,
+        sunset:     SUNSET_DATE,
+        migrate:    `${APP_URL}/api/v2/shorten`,
+        endpoints: {
+          'POST /api/v1/shorten': {
+            description: 'Shorten a URL',
+            deprecated:  true,
+            auth:        'Authorization: Bearer <api_key>',
+            rateLimit:   '100 requests/hour per API key',
+            body: {
+              url:        'string (required)',
+              customCode: 'string (optional)',
+              expiresAt:  'string (optional) — ISO date e.g. 2025-12-31',
+            },
           },
         },
-      },
+      }
     }),
   );
 }

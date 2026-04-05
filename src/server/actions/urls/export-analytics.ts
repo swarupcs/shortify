@@ -25,8 +25,10 @@ function buildCsv(headers: string[], rows: (string | number | null)[][]): string
 
 export async function exportAnalytics(type: ExportType): Promise<{
   success: boolean;
-  csv?: string;
-  filename?: string;
+  data?: {
+    csv: string;
+    filename: string;
+  };
   error?: string;
 }> {
   try {
@@ -66,7 +68,7 @@ export async function exportAnalytics(type: ExportType): Promise<{
         ]),
       );
 
-      return { success: true, csv, filename: `shortify-links-summary-${dateStr}.csv` };
+      return { success: true, data: { csv, filename: `shortify-links-summary-${dateStr}.csv` } };
     }
 
     // ── 2. Per-link detail ─────────────────────────────────────────────
@@ -78,7 +80,7 @@ export async function exportAnalytics(type: ExportType): Promise<{
         .orderBy(desc(urls.clicks));
 
       if (userUrls.length === 0) {
-        return { success: true, csv: 'Short Code,Original URL,Total Clicks,Clicks Last 30 Days', filename: `shortify-per-link-${dateStr}.csv` };
+        return { success: true, data: { csv: 'Short Code,Original URL,Total Clicks,Clicks Last 30 Days', filename: `shortify-per-link-${dateStr}.csv` } };
       }
 
       const urlIds   = userUrls.map((u) => u.id);
@@ -103,7 +105,7 @@ export async function exportAnalytics(type: ExportType): Promise<{
         ]),
       );
 
-      return { success: true, csv, filename: `shortify-per-link-${dateStr}.csv` };
+      return { success: true, data: { csv, filename: `shortify-per-link-${dateStr}.csv` } };
     }
 
     // ── 3. Raw click events ────────────────────────────────────────────
@@ -116,8 +118,10 @@ export async function exportAnalytics(type: ExportType): Promise<{
       if (userUrls.length === 0) {
         return {
           success: true,
-          csv: 'Short Code,Clicked At,Country,Referrer,Device,Browser',
-          filename: `shortify-click-events-${dateStr}.csv`,
+          data: {
+            csv: 'Short Code,Clicked At,Country,Referrer,Device,Browser',
+            filename: `shortify-click-events-${dateStr}.csv`,
+          }
         };
       }
 
@@ -152,7 +156,7 @@ export async function exportAnalytics(type: ExportType): Promise<{
         ]),
       );
 
-      return { success: true, csv, filename: `shortify-click-events-${dateStr}.csv` };
+      return { success: true, data: { csv, filename: `shortify-click-events-${dateStr}.csv` } };
     }
 
     return { success: false, error: 'Invalid export type' };

@@ -81,16 +81,16 @@ export function AnalyticsTab({ urls }: AnalyticsTabProps) {
     setExportingType(type);
     try {
       const result = await exportAnalytics(type);
-      if (!result.success || !result.csv) {
+      if (!result.success || !result.data) {
         toast.error('Export failed', { description: result.error });
         return;
       }
       // Trigger browser download
-      const blob = new Blob([result.csv], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob([result.data.csv], { type: 'text/csv;charset=utf-8;' });
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
       a.href     = url;
-      a.download = result.filename ?? 'export.csv';
+      a.download = result.data.filename ?? 'export.csv';
       a.click();
       URL.revokeObjectURL(url);
       toast.success('Export downloaded');
